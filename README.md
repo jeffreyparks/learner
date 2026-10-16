@@ -1,6 +1,6 @@
 # Learner
 
-Inpired by Anki, built for spaced-repetition study of any subject including technical material: Python, SQL, machine learning, that sort of thing. 
+Inspired by Anki, built for spaced-repetition study of any subject including technical material: Python, SQL, machine learning, that sort of thing. 
 
 A few things I wanted that Anki doesn't really do:
 
