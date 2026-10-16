@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>Collections</h1>
+  <a class="button primary" href="/collections/new">+ New collection</a>
+</div>
+
+{% for snap, current in items %}
+<section class="card-panel collection">
+  <header>
+    <h2>{{ snap.collection.name }}</h2>
+    <span class="links">
+      <a href="/browse?collection_id={{ snap.collection.id }}">Cards</a> ·
+      <a href="/cards/new?collection_id={{ snap.collection.id }}">Add card</a> ·
+      <a href="/collections/{{ snap.collection.id }}/order">Card order</a>{% if ai_grading and snap.order.unsequenced %} <span class="badge" title="Added or edited since the last rebuild">{{ snap.order.unsequenced|length }} to order</span>{% endif %} ·
+      <a href="/collections/{{ snap.collection.id }}">Edit</a>
+    </span>
+  </header>
+  {% if not snap.tiers %}
+    <p class="muted">No cards yet. <a href="/cards/new?collection_id={{ snap.collection.id }}">Add one</a> or <a href="/import">import a file</a>.</p>
+  {% endif %}
+  {% for t in snap.tiers %}
+  <div class="tier {% if t.tier == current %}current{% endif %} {% if not t.unlocked %}locked{% endif %}">
+    <div class="tier-name">
+      {{ snap.collection.tier_label(t.tier) }}
+      {% if t.complete %}<span class="badge known">complete</span>
+      {% elif not t.unlocked %}<span class="badge locked">locked</span>
+      {% elif t.tier == current %}<span class="badge current">current</span>{% endif %}
+    </div>
+    <div class="tier-progress">
+      <div class="bar" title="{{ (t.pct_known * 100)|round|int }}% known"><span style="width: {{ (t.pct_known * 100)|round|int }}%"></span></div>
+      <div class="counts">{{ t.known }} known · {{ t.learning }} learning · {{ t.new }} new</div>
+    </div>
+    <a class="button {% if t.tier == current %}primary{% endif %}" href="/study/{{ snap.collection.id }}/{{ t.tier }}">Study</a>
+  </div>
+  {% endfor %}
+</section>
+{% else %}
+<p class="muted">No collections yet. <a href="/collections/new">Create one</a> or <a href="/import">import a file</a>.</p>
+{% endfor %}
+
+<p class="muted small">A card is <em>known</em> after {{ cfg.known_streak }} correct answers in separate sessions. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.</p>
+
+{% if archived %}
+<details class="archived-list">
+  <summary>Archived collections ({{ archived|length }})</summary>
+  <ul>{% for c in archived %}<li><a href="/collections/{{ c.id }}">{{ c.name }}</a></li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,103 @@
+{
+  "collection": "SQL",
+  "sql_dialect": "mysql",
+  "tier_labels": {"1": "Foundations", "2": "Intermediate"},
+  "cards": [
+    {
+      "tier": 1, "answer_format": "text",
+      "prompt": "What is the difference between `WHERE` and `HAVING`?",
+      "reference_answer": "`WHERE` filters individual rows **before** grouping. `HAVING` filters groups **after** `GROUP BY`, so it can use aggregate functions like `SUM()` or `COUNT()`.",
+      "rubric": ["WHERE filters rows before grouping", "HAVING filters groups after GROUP BY", "HAVING can reference aggregates"],
+      "references": [{"title": "MySQL: SELECT statement", "url": "https://dev.mysql.com/doc/refman/8.0/en/select.html"}],
+      "tags": ["filtering", "aggregation"]
+    },
+    {
+      "tier": 1, "answer_format": "sql",
+      "prompt": "Table `customers(id, name, city)`.\n\nReturn the names of customers in `'Boston'`, sorted alphabetically.",
+      "reference_answer": "SELECT name\nFROM customers\nWHERE city = 'Boston'\nORDER BY name;",
+      "rubric": ["Filters on city = 'Boston'", "Orders by name ascending"],
+      "references": [{"title": "MySQL: SELECT statement", "url": "https://dev.mysql.com/doc/refman/8.0/en/select.html"}],
+      "tags": ["filtering", "sorting"]
+    },
+    {
+      "tier": 1, "answer_format": "text",
+      "prompt": "What does `COUNT(*)` count, compared with `COUNT(column)`?",
+      "reference_answer": "`COUNT(*)` counts all rows. `COUNT(column)` counts only rows where that column is **not NULL**.",
+      "rubric": ["COUNT(*) counts every row", "COUNT(column) skips NULLs"],
+      "references": [{"title": "MySQL: Aggregate function descriptions", "url": "https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html"}],
+      "tags": ["aggregation", "nulls"]
+    },
+    {
+      "tier": 1, "answer_format": "sql",
+      "prompt": "Table `orders(id, customer_id, total, created_at)`.\n\nReturn each `customer_id` with the number of orders they've placed.",
+      "reference_answer": "SELECT customer_id, COUNT(*) AS order_count\nFROM orders\nGROUP BY customer_id;",
+      "rubric": ["Groups by customer_id", "Counts orders per group"],
+      "references": [{"title": "MySQL: Aggregate function descriptions", "url": "https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html"}],
+      "tags": ["aggregation"]
+    },
+    {
+      "tier": 1, "answer_format": "text",
+      "prompt": "What's the difference between an `INNER JOIN` and a `LEFT JOIN`?",
+      "reference_answer": "An `INNER JOIN` returns only rows that match in both tables. A `LEFT JOIN` returns **every** row from the left table; where there's no match on the right, the right-hand columns are `NULL`.",
+      "rubric": ["INNER JOIN keeps only matching rows", "LEFT JOIN keeps all left rows", "Unmatched right columns are NULL"],
+      "references": [{"title": "MySQL: JOIN clause", "url": "https://dev.mysql.com/doc/refman/8.0/en/join.html"}],
+      "tags": ["joins"]
+    },
+    {
+      "tier": 1, "answer_format": "sql",
+      "prompt": "Tables `customers(id, name, city)` and `orders(id, customer_id, total, created_at)`.\n\nReturn each customer's name and their number of orders, **including customers with no orders** (they should show 0).",
+      "reference_answer": "SELECT c.name, COUNT(o.id) AS order_count\nFROM customers c\nLEFT JOIN orders o ON o.customer_id = c.id\nGROUP BY c.id, c.name;",
+      "rubric": ["LEFT JOIN so customers without orders appear", "COUNT a column from orders, not *, so they get 0", "Groups by customer"],
+      "references": [{"title": "MySQL: JOIN clause", "url": "https://dev.mysql.com/doc/refman/8.0/en/join.html"}],
+      "tags": ["joins", "aggregation"]
+    },
+    {
+      "tier": 1, "answer_format": "sql",
+      "prompt": "Table `orders(id, customer_id, total, created_at)`.\n\nReturn each order's `id` and a column `size` that is `'large'` when `total` is 500 or more, otherwise `'small'`.",
+      "reference_answer": "SELECT id,\n       CASE WHEN total >= 500 THEN 'large' ELSE 'small' END AS size\nFROM orders;",
+      "rubric": ["Uses CASE WHEN (or IF)", "Threshold is >= 500", "Aliases the column as size"],
+      "references": [{"title": "MySQL: Flow control functions", "url": "https://dev.mysql.com/doc/refman/8.0/en/flow-control-functions.html"}],
+      "tags": ["conditional"]
+    },
+    {
+      "tier": 2, "answer_format": "sql",
+      "prompt": "Table `orders(id, customer_id, total, created_at)`.\n\nReturn the `customer_id` of every customer whose total spend is more than 1000, with that total.",
+      "reference_answer": "SELECT customer_id, SUM(total) AS spend\nFROM orders\nGROUP BY customer_id\nHAVING SUM(total) > 1000;",
+      "rubric": ["Groups by customer_id", "Sums total", "Filters with HAVING, not WHERE"],
+      "references": [{"title": "MySQL: SELECT statement", "url": "https://dev.mysql.com/doc/refman/8.0/en/select.html"}],
+      "tags": ["aggregation", "filtering"]
+    },
+    {
+      "tier": 2, "answer_format": "sql",
+      "prompt": "Table `orders(id, customer_id, total, created_at)`.\n\nUsing a common table expression (CTE), calculate each customer's total spend, then return only the customers whose spend is above the average customer spend.",
+      "reference_answer": "WITH totals AS (\n  SELECT customer_id, SUM(total) AS spend\n  FROM orders\n  GROUP BY customer_id\n)\nSELECT customer_id, spend\nFROM totals\nWHERE spend > (SELECT AVG(spend) FROM totals);",
+      "rubric": ["Defines a CTE with WITH", "CTE sums spend per customer", "Compares against the average of the per-customer totals"],
+      "references": [{"title": "MySQL: WITH (common table expressions)", "url": "https://dev.mysql.com/doc/refman/8.0/en/with.html"}],
+      "tags": ["cte", "subqueries"]
+    },
+    {
+      "tier": 2, "answer_format": "sql",
+      "prompt": "Table `orders(id, customer_id, total, created_at)`.\n\nFor every order, show `id`, `customer_id`, `total`, and a running total of that customer's spend in date order.",
+      "reference_answer": "SELECT id, customer_id, total,\n       SUM(total) OVER (PARTITION BY customer_id ORDER BY created_at) AS running_total\nFROM orders;",
+      "rubric": ["Uses SUM() as a window function with OVER", "Partitions by customer_id", "Orders the window by created_at"],
+      "references": [{"title": "MySQL: Window function concepts and syntax", "url": "https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html"}],
+      "tags": ["window-functions"]
+    },
+    {
+      "tier": 2, "answer_format": "text",
+      "prompt": "How do `ROW_NUMBER()`, `RANK()`, and `DENSE_RANK()` differ when there are ties?",
+      "reference_answer": "- `ROW_NUMBER()` gives every row a unique number, breaking ties arbitrarily: 1, 2, 3, 4.\n- `RANK()` gives tied rows the same rank and then **skips**: 1, 2, 2, 4.\n- `DENSE_RANK()` gives tied rows the same rank **without** gaps: 1, 2, 2, 3.",
+      "rubric": ["ROW_NUMBER is always unique", "RANK leaves gaps after ties", "DENSE_RANK has no gaps"],
+      "references": [{"title": "MySQL: Window function descriptions", "url": "https://dev.mysql.com/doc/refman/8.0/en/window-function-descriptions.html"}],
+      "tags": ["window-functions"]
+    },
+    {
+      "tier": 2, "answer_format": "sql",
+      "prompt": "Table `orders(id, customer_id, total, created_at)`.\n\nReturn each customer's **single largest** order (`customer_id`, `id`, `total`). If a customer has two orders tied for largest, returning either is fine.",
+      "reference_answer": "WITH ranked AS (\n  SELECT customer_id, id, total,\n         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY total DESC) AS rn\n  FROM orders\n)\nSELECT customer_id, id, total\nFROM ranked\nWHERE rn = 1;",
+      "rubric": ["Ranks orders within each customer by total descending", "Keeps only the top-ranked row per customer"],
+      "references": [{"title": "MySQL: Window function descriptions", "url": "https://dev.mysql.com/doc/refman/8.0/en/window-function-descriptions.html"}],
+      "tags": ["window-functions", "cte"]
+    }
+  ]
+}

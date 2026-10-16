@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card-panel">
+  <h1>Session complete</h1>
+  {% if summary.answered %}
+  <p class="big">{{ summary.right }} right · {{ summary.wrong }} wrong{% if summary.newly_known %} · {{ summary.newly_known }} newly known{% endif %}</p>
+  {% else %}
+  <p class="muted">No cards answered this session.</p>
+  {% endif %}
+
+  {% if tier %}
+  <p>{{ snap.collection.tier_label(tier.tier) }}: {{ tier.known }} of {{ tier.total }} known ({{ (tier.pct_known * 100)|round|int }}%).</p>
+  {% if tier.complete %}
+    <p class="notice">This tier is complete.
+    {% if next_tier %}Try {{ snap.collection.tier_label(next_tier.tier) }} next.{% endif %}</p>
+  {% elif next_tier and next_tier.unlocked %}
+    <p class="notice">{{ snap.collection.tier_label(next_tier.tier) }} is unlocked.</p>
+  {% elif next_tier %}
+    <p class="muted">{{ snap.collection.tier_label(next_tier.tier) }} unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.</p>
+  {% endif %}
+  {% endif %}
+
+  <div class="actions">
+    {% if tier %}<a class="button {% if not (tier.complete and next_tier) %}primary{% else %}secondary{% endif %}" href="/study/{{ snap.collection.id }}/{{ tier.tier }}">Another session</a>{% endif %}
+    {% if tier and tier.complete and next_tier %}<a class="button primary" href="/study/{{ snap.collection.id }}/{{ next_tier.tier }}">Study {{ snap.collection.tier_label(next_tier.tier) }}</a>{% endif %}
+    <a class="button secondary" href="/">Dashboard</a>
+  </div>
+</section>
+{% endblock %}

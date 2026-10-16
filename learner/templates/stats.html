@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Stats · Learner{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Stats</h1>
+  <form method="get" class="filters">
+    <select name="collection_id" aria-label="Collection" onchange="this.form.submit()">
+      <option value="">All collections</option>
+      {% for c in collections %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <noscript><button type="submit">Show</button></noscript>
+  </form>
+</div>
+
+{% if not totals.attempts %}
+<p class="muted">No answers yet. Study a few cards and come back.</p>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="tile-value">{{ totals.attempts }}</div><div class="tile-label">answers</div></div>
+  <div class="tile"><div class="tile-value">{{ (totals.right_pct * 100)|round|int }}%</div><div class="tile-label">right</div></div>
+  <div class="tile"><div class="tile-value">{{ ((totals.with_hints / totals.attempts) * 100)|round|int }}%</div><div class="tile-label">used a hint</div></div>
+  {% if totals.median_seconds %}<div class="tile"><div class="tile-value">{{ totals.median_seconds|round|int }}s</div><div class="tile-label">typical time per card</div></div>{% endif %}
+</div>
+
+<section class="card-panel">
+  <h2>Answers per day <span class="muted small">last 30 days</span></h2>
+  <div class="bar-chart" role="img" aria-label="Answers per day over the last 30 days. Details in the table below.">
+    {% for d in days %}
+    <div class="bar-slot" tabindex="0"
+         data-tip="{{ d.day.strftime('%b') }} {{ d.day.day }}: {% if d.attempts %}{{ d.attempts }} answer{{ '' if d.attempts == 1 else 's' }}, {{ (d.right_pct * 100)|round|int }}% right{% else %}no answers{% endif %}">
+      <div class="bar" style="height: {{ (d.attempts / max_day * 100) if max_day else 0 }}%"></div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="bar-axis"><span>{{ days[0].day.strftime('%b') }} {{ days[0].day.day }}</span><span>{{ days[-1].day.strftime('%b') }} {{ days[-1].day.day }}</span></div>
+  <details class="small"><summary>Show as a table</summary>
+    <table class="cards"><thead><tr><th>Day</th><th>Answers</th><th>Right</th></tr></thead><tbody>
+      {% for d in days if d.attempts %}<tr><td>{{ d.day.strftime('%a %b') }} {{ d.day.day }}</td><td>{{ d.attempts }}</td><td>{{ (d.right_pct * 100)|round|int }}%</td></tr>{% endfor %}
+    </tbody></table>
+  </details>
+</section>
+
+<section class="card-panel">
+  <h2>AI grader agreement</h2>
+  {% if grader %}
+  <p class="muted small">How often you disagreed with the AI's verdict. Each disagreement is saved for the grader test set
+    (<code>uv run learner-eval export</code>). If one format stays high, a stronger grading model for it may help.</p>
+  <table class="cards">
+    <thead><tr><th>Format</th><th>Graded</th><th>You disagreed</th><th>AI too harsh</th><th>AI too lenient</th></tr></thead>
+    <tbody>{% for g in grader %}
+      <tr><td>{{ g.answer_format }}</td><td>{{ g.graded }}</td><td>{{ g.overridden }} ({{ (g.override_pct * 100)|round|int }}%)</td><td>{{ g.too_harsh }}</td><td>{{ g.too_lenient }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted">No AI-graded answers yet.</p>{% endif %}
+</section>
+
+<div class="two-col">
+  <section class="card-panel">
+    <h2>Weakest concepts</h2>
+    {% if weak_concepts %}
+    <table class="cards"><thead><tr><th>Concept</th><th>Recent accuracy</th><th>Answers</th></tr></thead><tbody>
+      {% for w in weak_concepts %}<tr><td><span class="chip">{{ w.name }}</span></td><td>{{ (w.accuracy * 100)|round|int }}%</td><td>{{ w.attempts }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="muted small">Needs concepts (from Card order) and a few answers per card.</p>{% endif %}
+  </section>
+  <section class="card-panel">
+    <h2>Cards to work on</h2>
+    {% if weak_cards %}
+    <ul class="plain-list">{% for c in weak_cards %}
+      <li><a href="/cards/{{ c.id }}">{{ c.prompt|card_title(70) }}</a> <span class="muted small">{{ (progress[c.id].recent_accuracy * 100)|round|int }}% recently</span></li>
+    {% endfor %}</ul>
+    {% else %}<p class="muted small">Nothing stands out yet.</p>{% endif %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}

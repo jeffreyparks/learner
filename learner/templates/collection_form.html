@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list %}
+{% block title %}{{ "Edit collection" if collection else "New collection" }} · Learner{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ "Edit collection" if collection else "New collection" }}</h1>
+  {% if collection and collection.archived %}<span class="badge archived">archived</span>{% endif %}
+</div>
+{% if request.query_params.get("saved") %}<p class="notice">Saved.</p>{% endif %}
+{{ errors_list(errors) }}
+<form method="post" class="stacked">
+  <label>Name <input type="text" name="name" value="{{ form.name or '' }}" required></label>
+  <label>SQL dialect <span class="hint">Used to check SQL answers</span>
+    <select name="sql_dialect">{% for d in SQL_DIALECTS %}<option {% if form.sql_dialect == d %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+  <label>Tier labels <span class="hint">Optional. One per line, like “1: Foundations”</span>
+    <textarea name="tier_labels" rows="4">{{ form.tier_labels or '' }}</textarea></label>
+  <div class="actions">
+    <button type="submit" class="primary">Save</button>
+    <a class="button secondary" href="/">Dashboard</a>
+  </div>
+</form>
+{% if collection %}
+<div class="actions danger-zone">
+  <a class="button secondary" href="/collections/{{ collection.id }}/export">Export JSON</a>
+  <form method="post" action="/collections/{{ collection.id }}/archive"><button type="submit">{{ "Unarchive" if collection.archived else "Archive" }} collection</button></form>
+</div>
+{% endif %}
+{% endblock %}

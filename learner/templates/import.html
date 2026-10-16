@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list %}
+{% block title %}Import · Learner{% endblock %}
+{% block content %}
+<h1>Import a collection</h1>
+<p class="muted">A JSON file in the export format (see DESIGN.md §11). The collection is matched by name; cards with an <code>id</code> are updated, cards without one are added. Nothing is written unless the whole file is valid.</p>
+{% if result and result.errors %}{{ errors_list(result.errors) }}{% endif %}
+{% if result and not result.errors %}
+<p class="notice">Imported into <a href="/browse?collection_id={{ result.collection_id }}">{{ result.collection_name }}</a>:
+  {{ result.created }} added · {{ result.updated }} updated · {{ result.unchanged }} unchanged.</p>
+{% if ai_grading and (result.created or result.updated) %}
+<form method="post" action="/collections/{{ result.collection_id }}/order/rebuild" class="actions" id="rebuild-form">
+  <button type="submit" class="primary" id="rebuild-button">Order these cards now</button>
+  <span class="muted small">The AI works out which cards build on which. About a minute per tier.</span>
+</form>
+<script type="module">
+  document.getElementById("rebuild-form").addEventListener("submit", () => {
+    const b = document.getElementById("rebuild-button"); b.disabled = true; b.textContent = "Ordering…";
+  });
+</script>
+{% endif %}
+{% endif %}
+<form method="post" enctype="multipart/form-data" class="stacked">
+  <label>File <input type="file" name="file" accept=".json,application/json"></label>
+  <label>…or paste JSON <textarea name="text" rows="10" class="code" spellcheck="false">{{ text }}</textarea></label>
+  <div class="actions"><button type="submit" class="primary">Import</button></div>
+</form>
+{% endblock %}

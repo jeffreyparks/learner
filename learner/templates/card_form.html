@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list, status_badge %}
+{% block title %}{{ "Edit card" if card else "New card" }} · Learner{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ "Edit card" if card else "New card" }}</h1>
+  {% if card %}<span>{{ status_badge("archived" if card.archived else progress.status) }}{% if progress and progress.attempts %} <span class="muted small">streak {{ progress.streak }} · {{ progress.attempts }} attempts</span>{% endif %}</span>{% endif %}
+</div>
+{% if request.query_params.get("saved") %}<p class="notice">Saved.</p>{% endif %}
+{% if request.query_params.get("reset") %}<p class="notice">Progress reset. Earlier attempts are kept but no longer count.</p>{% endif %}
+{{ errors_list(errors) }}
+
+<form method="post" class="stacked" id="card-form">
+  <div class="row">
+    <label>Collection
+      <select name="collection_id" required>
+        <option value="">Choose…</option>
+        {% for c in collections %}<option value="{{ c.id }}" data-dialect="{{ c.sql_dialect }}" {% if form.collection_id == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        <option value="{{ NEW_COLLECTION }}" {% if form.collection_id == NEW_COLLECTION %}selected{% endif %}>+ New collection…</option>
+      </select>
+    </label>
+    <label id="new-collection-field" {% if form.collection_id != NEW_COLLECTION %}hidden{% endif %}>New collection name
+      <input type="text" name="new_collection" value="{{ form.new_collection or '' }}" placeholder="e.g. Machine Learning"></label>
+    <label>Tier <input type="number" name="tier" min="1" value="{{ form.tier }}" required></label>
+    <label>Answer format
+      <select name="answer_format">{% for f in ANSWER_FORMATS %}<option {% if form.answer_format == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select>
+    </label>
+  </div>
+  <label>Prompt <span class="hint">Markdown</span>
+    <textarea name="prompt" rows="5" required>{{ form.prompt }}</textarea></label>
+  <label>Reference answer <span class="hint">Markdown for text cards; checked as you type for Python and SQL</span>
+    <textarea name="reference_answer" id="reference-answer" rows="6" class="code" required spellcheck="false">{{ form.reference_answer }}</textarea></label>
+  <label>Key points <span class="hint">Optional. One per line; the AI grader checks answers against these</span>
+    <textarea name="rubric" rows="3">{{ form.rubric }}</textarea></label>
+  <label>References <span class="hint">Optional. One per line: Title | https://…</span>
+    <textarea name="references" rows="3" placeholder="MySQL: JOIN clause | https://dev.mysql.com/doc/refman/8.0/en/join.html">{{ form.references }}</textarea></label>
+  <label>Tags <span class="hint">Optional. Comma-separated</span>
+    <input type="text" name="tags" value="{{ form.tags }}"></label>
+  <fieldset class="concepts-fields">
+    <legend>Concepts <span class="hint">Used to order new cards. Normally set by the AI; anything you type here is kept.</span></legend>
+    <label>Teaches <span class="hint">Comma-separated, e.g. left-join, null-handling</span>
+      <input type="text" name="concepts_introduced" value="{{ form.concepts_introduced or '' }}"></label>
+    <label>Needs first <span class="hint">Concepts a learner should know before this card</span>
+      <input type="text" name="concepts_required" value="{{ form.concepts_required or '' }}"></label>
+    {% if card %}<label class="check"><input type="checkbox" name="concepts_locked" value="1" {% if form.concepts_locked %}checked{% endif %}>
+      Keep my concepts (untick to let the AI set them at the next rebuild)</label>{% endif %}
+  </fieldset>
+  <div class="actions">
+    <button type="submit" class="primary">Save</button>
+    <a class="button secondary" href="/browse">Back to cards</a>
+  </div>
+</form>
+
+{% if card %}
+<div class="actions danger-zone">
+  <form method="post" action="/cards/{{ card.id }}/archive"><button type="submit">{{ "Unarchive" if card.archived else "Archive" }}</button></form>
+  <form method="post" action="/cards/{{ card.id }}/reset" onsubmit="return confirm('Reset progress for this card? Earlier attempts stay in the history but stop counting.')">
+    <button type="submit">Reset progress</button></form>
+</div>
+{% endif %}
+{% endblock %}

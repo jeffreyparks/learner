@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card-panel">
+  <h1>{{ snap.collection.tier_label(tier.tier) }} isn't unlocked yet</h1>
+  {% if previous %}
+  <p>It unlocks when {{ (cfg.unlock_pct * 100)|round|int }}% of {{ snap.collection.tier_label(previous.tier) }} is known.
+     You're at {{ (previous.pct_known * 100)|round|int }}% ({{ previous.known }} of {{ previous.total }} cards).</p>
+  {% endif %}
+  <p>You can start it anyway. Earlier material may not be solid yet.</p>
+  <div class="actions">
+    <a class="button primary" href="/study/{{ snap.collection.id }}/{{ tier.tier }}?confirm=1">Start anyway</a>
+    <a class="button secondary" href="/">Back to dashboard</a>
+  </div>
+</section>
+{% endblock %}

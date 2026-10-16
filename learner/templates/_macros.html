@@ -1,0 +1,18 @@
+{% macro errors_list(errors) %}
+{% if errors %}<div class="errors"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+{% endmacro %}
+
+{% macro status_badge(status) %}<span class="badge {{ status }}">{{ status }}</span>{% endmacro %}
+
+{% macro ai_setup(what) %}
+<div class="notice warn-notice">
+  <strong>{{ what }} needs AI, and none is set up right now.</strong>
+  {% if ai_off_by_choice %}
+  It's switched off in <code>learner.toml</code> (<code>provider = "off"</code> under <code>[llm]</code>). Change that and restart.
+  {% else %}
+  The app didn't find an API key when it started. Create a file named <code>.env</code> in the project folder containing
+  <code>ANTHROPIC_API_KEY=your-key</code>, then restart the app (<code>Ctrl+C</code>, then <code>uv run learner</code>).
+  The key then works every time; <code>.env</code> is never committed.
+  {% endif %}
+</div>
+{% endmacro %}

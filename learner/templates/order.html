@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, ai_setup %}
+{% block title %}Card order · {{ snap.collection.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Card order · {{ snap.collection.name }}</h1>
+  {% if ai_grading %}
+  <form method="post" action="/collections/{{ snap.collection.id }}/order/rebuild" id="rebuild-form">
+    <button type="submit" class="primary" id="rebuild-button">Rebuild order</button>
+  </form>
+  {% endif %}
+</div>
+<p class="muted">New cards are introduced in this order: a card that teaches a concept comes before the cards that need it.
+  The AI reads each tier in one pass to find those concepts. Edit a card to set its concepts yourself.</p>
+
+{% if rebuilt and not errors %}<p class="notice">Order rebuilt.</p>{% endif %}
+{% if errors %}<div class="errors"><strong>Some tiers couldn't be ordered:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+{% if not ai_grading %}{{ ai_setup("Ordering cards") }}<p class="muted">Until then, new cards come in the order they were added.</p>{% endif %}
+
+{% set unsequenced = snap.order.unsequenced %}
+{% if unsequenced and ai_grading %}
+<p class="notice warn-notice">{{ unsequenced|length }} card{{ "" if unsequenced|length == 1 else "s" }} added or edited since the last rebuild {{ "is" if unsequenced|length == 1 else "are" }} at the end of {{ "its" if unsequenced|length == 1 else "their" }} tier. Rebuild to place {{ "it" if unsequenced|length == 1 else "them" }}.</p>
+{% endif %}
+
+{% set general = snap.order.warnings|selectattr("kind", "in", ["missing", "cycle"])|list %}
+{% if general %}
+<section class="card-panel">
+  <h3>Worth a look</h3>
+  <ul>{% for w in general %}<li>{{ w.message }}
+    {% for cid in w.card_ids %}<a href="/cards/{{ cid }}">#{{ cid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    {% if w.kind == "missing" and ai_grading %}· <a href="/cards/draft?collection_id={{ snap.collection.id }}&amp;concept={{ w.concept|urlencode }}&amp;tier={{ snap.order.lowest_tier(w.card_ids) }}">Draft a card for it</a>{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% for t in snap.tiers %}
+<section class="card-panel">
+  <h2>{{ snap.collection.tier_label(t.tier) }}</h2>
+  <ol class="order-list">
+    {% for cid in snap.order.order.get(t.tier, []) %}
+    {% set c = by_id[cid] %}{% set a = snap.order.analyses.get(cid) %}
+    <li>
+      <div class="order-row">
+        <a href="/cards/{{ cid }}">{{ c.prompt|card_title }}</a>
+        {{ status_badge(snap.progress[cid].status) }}
+        {% if cid in snap.order.unsequenced %}<span class="badge">not ordered yet</span>{% endif %}
+        {% if a and a.manual %}<span class="badge" title="You set these concepts; rebuilds keep them">your concepts</span>{% endif %}
+      </div>
+      {% if a %}
+      <div class="concepts">
+        {% if a.introduced %}<span class="muted small">teaches</span> {% for n in a.introduced %}<span class="chip teach">{{ n }}</span>{% endfor %}{% endif %}
+        {% if a.required %}<span class="muted small">needs</span> {% for n in a.required %}<span class="chip">{{ n }}</span>{% endfor %}{% endif %}
+      </div>
+      {% endif %}
+      {% for w in snap.order.warnings_for(cid) if w.kind == "tier_mismatch" %}<div class="small warn-text">{{ w.message }}</div>{% endfor %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endfor %}
+<script type="module">
+  const form = document.getElementById("rebuild-form");
+  form?.addEventListener("submit", () => {
+    const button = document.getElementById("rebuild-button");
+    button.disabled = true;
+    button.textContent = "Rebuilding… (about a minute per tier)";
+  });
+</script>
+{% endblock %}

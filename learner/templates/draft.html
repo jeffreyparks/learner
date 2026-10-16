@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list, ai_setup %}
+{% block title %}Draft cards · Learner{% endblock %}
+{% block content %}
+<h1>Draft cards with AI</h1>
+<p class="muted">Paste notes, a code snippet, or a topic. The AI drafts cards in the collection's style; you choose which to keep and can edit them afterwards.</p>
+{{ errors_list(errors) }}
+
+{% if saved %}
+<div class="notice">
+  Saved {{ saved|length }} card{{ "" if saved|length == 1 else "s" }}:
+  <ul class="plain-list">{% for c in saved %}<li><a href="/cards/{{ c.id }}">{{ c.prompt|card_title(80) }}</a></li>{% endfor %}</ul>
+  <a href="/collections/{{ collection_id }}/order">Update the card order</a> so they're introduced at the right point.
+</div>
+{% endif %}
+
+{% if not ai_grading %}
+{{ ai_setup("Drafting cards") }}
+<p class="muted">Meanwhile you can still <a href="/cards/new">write a card yourself</a>.</p>
+{% else %}
+<form method="post" action="/cards/draft" class="stacked" id="draft-form">
+  <div class="row">
+    <label>Collection
+      <select name="collection_id" required>
+        <option value="">Choose…</option>
+        {% for c in collections %}<option value="{{ c.id }}" {% if collection_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>How many
+      <select name="count">{% for n in range(1, max_drafts + 1) %}<option {% if form.count == n|string %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+    </label>
+    <label>Tier
+      <select name="tier">
+        <option value="">Let the AI choose</option>
+        {% for t in range(1, 6) %}<option value="{{ t }}" {% if form.tier == t|string %}selected{% endif %}>Tier {{ t }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <input type="hidden" name="concept" value="{{ form.concept or '' }}">
+  <label>Notes <span class="hint">Anything you want cards about: notes, an article excerpt, code, a list of topics</span>
+    <textarea name="notes" rows="8" required>{{ form.notes or '' }}</textarea></label>
+  <div class="actions">
+    <button type="submit" class="primary" id="draft-button">Draft cards</button>
+    <span class="muted small">Takes up to a minute.</span>
+  </div>
+</form>
+{% endif %}
+
+{% if drafts %}
+<form method="post" action="/cards/draft/save">
+  <input type="hidden" name="collection_id" value="{{ collection_id }}">
+  <h2>Drafts</h2>
+  {% for d in drafts %}
+  {% set n = loop.index0 %}
+  <section class="card-panel draft">
+    <input type="hidden" name="draft_{{ n }}" value='{{ d.payload()|tojson }}'>
+    <label class="check draft-keep"><input type="checkbox" name="keep_{{ n }}" value="1" checked> Keep this card</label>
+    <div class="muted small">Tier {{ d.card.tier }} · {{ d.card.answer_format }}{% if d.card.tags %} · {{ d.card.tags|join(", ") }}{% endif %}</div>
+    <div class="markdown">{{ d.card.prompt|md }}</div>
+    <h4>Reference answer</h4>
+    {% if d.card.answer_format == "text" %}<div class="markdown">{{ d.card.reference_answer|md }}</div>
+    {% else %}<pre><code>{{ d.card.reference_answer }}</code></pre>{% endif %}
+    {% if d.card.rubric %}<h4>Key points</h4><ul>{% for p in d.card.rubric %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+    {% if d.introduced or d.required %}
+    <div class="concepts">
+      {% if d.introduced %}<span class="muted small">teaches</span> {% for c in d.introduced %}<span class="chip teach">{{ c }}</span>{% endfor %}{% endif %}
+      {% if d.required %}<span class="muted small">needs</span> {% for c in d.required %}<span class="chip">{{ c }}</span>{% endfor %}{% endif %}
+    </div>
+    {% endif %}
+    {% if d.suggested_references %}
+    <h4>Suggested links <span class="hint">AI-suggested: open them to check before keeping</span></h4>
+    <ul class="references">{% for r in d.suggested_references %}<li><a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a> <span class="muted small">{{ r.url }}</span></li>{% endfor %}</ul>
+    <label class="check"><input type="checkbox" name="refs_{{ n }}" value="1"> I checked these links; keep them</label>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <div class="actions"><button type="submit" class="primary">Save ticked cards</button></div>
+</form>
+{% endif %}
+<script type="module">
+  document.getElementById("draft-form")?.addEventListener("submit", () => {
+    const b = document.getElementById("draft-button"); b.disabled = true; b.textContent = "Drafting…";
+  });
+</script>
+{% endblock %}

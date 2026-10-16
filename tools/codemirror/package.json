@@ -1,0 +1,17 @@
+{
+  "name": "learner-codemirror-bundle",
+  "private": true,
+  "description": "Builds learner/static/vendor/codemirror.js. Only needed when upgrading CodeMirror; the app itself never runs Node.",
+  "scripts": {
+    "build": "esbuild entry.js --bundle --format=esm --minify --legal-comments=none --outfile=../../learner/static/vendor/codemirror.js"
+  },
+  "dependencies": {
+    "codemirror": "^6.0.1",
+    "@codemirror/lang-python": "^6.1.0",
+    "@codemirror/lang-sql": "^6.8.0",
+    "@codemirror/theme-one-dark": "^6.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

@@ -1,0 +1,28 @@
+# Copy to learner.toml and change what you need. Every setting is optional;
+# anything left out uses the default shown here. The API key comes from the
+# ANTHROPIC_API_KEY environment variable, never from this file.
+
+[app]
+db_path = "learner.db"      # SQLite file holding cards and progress
+port = 8765                 # served on 127.0.0.1 only
+open_browser = true         # open a browser tab on start
+
+[study]
+session_size = 20           # cards planned per session (missed cards that come back are extra)
+new_per_session = 5         # new cards introduced per session
+refresher_pct = 0.10        # share of a session spent on known cards
+known_streak = 2            # correct answers, in separate sessions, to count as known
+unlock_pct = 0.80           # share of a tier known before the next tier unlocks
+requeue_gap = 3             # a missed card comes back after this many other cards
+max_attempts_per_card = 3   # per session, so one hard card can't take over a session
+
+[llm]
+provider = "claude"                  # "claude", "fake" (canned answers, for trying the flow), or "off"
+grade_model = "claude-haiku-5-5"     # grades every answer, so it should be fast
+hint_model = "claude-haiku-5-5"
+sequence_model = "claude-sonnet-5-5" # orders cards; runs rarely
+draft_model = "claude-sonnet-5-5"    # drafts new cards from your notes
+effort = "low"                       # effort for grading and hints: low, medium, high, xhigh, max
+sequence_effort = "medium"           # effort for ordering cards
+draft_effort = "medium"              # effort for drafting cards
+timeout = 30.0                       # seconds before falling back to marking yourself

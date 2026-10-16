@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Learner{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <nav class="top">
+    <a href="/" class="brand">Learner</a>
+    <a href="/browse">Cards</a>
+    <a href="/cards/new">New card</a>
+    <a href="/cards/draft">Draft with AI</a>
+    <a href="/import">Import</a>
+    <a href="/stats">Stats</a>
+  </nav>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

@@ -1,0 +1,102 @@
+{
+  "collection": "Python",
+  "tier_labels": {"1": "Foundations", "2": "Intermediate"},
+  "cards": [
+    {
+      "tier": 1, "answer_format": "text",
+      "prompt": "What's the difference between a `list` and a `tuple`?",
+      "reference_answer": "A `list` is **mutable**: you can add, remove, and change items. A `tuple` is **immutable** once created. Because tuples are immutable (and their items hashable), they can be used as dictionary keys or set members; lists can't.",
+      "rubric": ["Lists are mutable, tuples are immutable", "Tuples can be dict keys / set members"],
+      "references": [{"title": "Python tutorial: Tuples and sequences", "url": "https://docs.python.org/3/tutorial/datastructures.html#tuples-and-sequences"}],
+      "tags": ["data-structures"]
+    },
+    {
+      "tier": 1, "answer_format": "python",
+      "prompt": "Given a list `nums`, write a **list comprehension** that produces the squares of only the even numbers.",
+      "reference_answer": "[n * n for n in nums if n % 2 == 0]",
+      "rubric": ["Uses a list comprehension", "Filters to even numbers", "Squares each value"],
+      "references": [{"title": "Python tutorial: List comprehensions", "url": "https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions"}],
+      "tags": ["comprehensions"]
+    },
+    {
+      "tier": 1, "answer_format": "python",
+      "prompt": "`stock` is a dict mapping fruit names to quantities. Get the quantity for `\"apple\"`, or `0` if it isn't there, **without** `try`/`except` or an `if`.",
+      "reference_answer": "stock.get(\"apple\", 0)",
+      "rubric": ["Uses dict.get", "Passes 0 as the default"],
+      "references": [{"title": "Python docs: dict.get", "url": "https://docs.python.org/3/library/stdtypes.html#dict.get"}],
+      "tags": ["dicts"]
+    },
+    {
+      "tier": 1, "answer_format": "python",
+      "prompt": "Print each item of the list `names` with its position, starting at 1, like `1. Ada`.",
+      "reference_answer": "for i, name in enumerate(names, start=1):\n    print(f\"{i}. {name}\")",
+      "rubric": ["Uses enumerate", "Starts counting at 1", "Prints index and item"],
+      "references": [{"title": "Python docs: enumerate()", "url": "https://docs.python.org/3/library/functions.html#enumerate"}],
+      "tags": ["loops"]
+    },
+    {
+      "tier": 1, "answer_format": "text",
+      "prompt": "What does `is` compare, versus `==`?",
+      "reference_answer": "`==` compares **values** (equality). `is` compares **identity**: whether both names refer to the very same object. Use `is` for singletons like `None` (`x is None`), and `==` for everything else.",
+      "rubric": ["== compares values", "is compares object identity", "Use is for None"],
+      "references": [{"title": "Python reference: Comparisons", "url": "https://docs.python.org/3/reference/expressions.html#comparisons"}],
+      "tags": ["basics"]
+    },
+    {
+      "tier": 1, "answer_format": "python",
+      "prompt": "Given two equal-length lists `keys` and `values`, build a dict pairing them up, in one line.",
+      "reference_answer": "dict(zip(keys, values))",
+      "rubric": ["Uses zip to pair the lists", "Builds a dict from the pairs"],
+      "references": [{"title": "Python docs: zip()", "url": "https://docs.python.org/3/library/functions.html#zip"}],
+      "tags": ["dicts", "builtins"]
+    },
+    {
+      "tier": 2, "answer_format": "python",
+      "prompt": "Given a list of strings `words`, return the 3 most common words with their counts.",
+      "reference_answer": "from collections import Counter\n\nCounter(words).most_common(3)",
+      "rubric": ["Uses collections.Counter (or an equivalent count)", "Returns the top 3 with counts"],
+      "references": [{"title": "Python docs: collections.Counter", "url": "https://docs.python.org/3/library/collections.html#collections.Counter"}],
+      "tags": ["collections"]
+    },
+    {
+      "tier": 2, "answer_format": "text",
+      "prompt": "What's wrong with `def add(item, items=[]): items.append(item); return items`?",
+      "reference_answer": "The default list is created **once**, when the function is defined, and shared by every call that doesn't pass `items`. So items pile up across calls. Use `items=None` and create a new list inside: `if items is None: items = []`.",
+      "rubric": ["Default is evaluated once at definition time", "The same list is shared across calls", "Fix: default to None and create the list inside"],
+      "references": [{"title": "Python tutorial: Default argument values", "url": "https://docs.python.org/3/tutorial/controlflow.html#default-argument-values"}],
+      "tags": ["functions", "gotchas"]
+    },
+    {
+      "tier": 2, "answer_format": "python",
+      "prompt": "Write a **generator function** `fib()` that yields the Fibonacci numbers 0, 1, 1, 2, 3, 5, … forever.",
+      "reference_answer": "def fib():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b",
+      "rubric": ["Uses yield", "Loops indefinitely", "Produces 0, 1, 1, 2, 3, …"],
+      "references": [{"title": "Python tutorial: Generators", "url": "https://docs.python.org/3/tutorial/classes.html#generators"}],
+      "tags": ["generators"]
+    },
+    {
+      "tier": 2, "answer_format": "python",
+      "prompt": "`people` is a list of dicts like `{\"name\": \"Ada\", \"age\": 36}`. Return a new list sorted by age, **oldest first**.",
+      "reference_answer": "sorted(people, key=lambda p: p[\"age\"], reverse=True)",
+      "rubric": ["Uses sorted (a new list), not list.sort", "Sorts with a key on age", "Descending order"],
+      "references": [{"title": "Python docs: Sorting techniques", "url": "https://docs.python.org/3/howto/sorting.html"}],
+      "tags": ["sorting"]
+    },
+    {
+      "tier": 2, "answer_format": "text",
+      "prompt": "What does a `with` statement guarantee?",
+      "reference_answer": "That the context manager's cleanup (its `__exit__` method) runs when the block ends, **even if an exception is raised**. For example, `with open(path) as f:` always closes the file.",
+      "rubric": ["Cleanup always runs", "Even when an exception occurs", "Example such as closing a file"],
+      "references": [{"title": "Python reference: The with statement", "url": "https://docs.python.org/3/reference/compound_stmts.html#the-with-statement"}],
+      "tags": ["context-managers"]
+    },
+    {
+      "tier": 2, "answer_format": "text",
+      "prompt": "What is the GIL, and what does it mean for threads in CPython?",
+      "reference_answer": "The Global Interpreter Lock lets only one thread execute Python bytecode at a time in standard CPython. Threads still help with **I/O-bound** work (they release the GIL while waiting), but **CPU-bound** work doesn't run in parallel; use processes instead. (Python 3.13+ also offers an experimental free-threaded build without the GIL.)",
+      "rubric": ["Only one thread runs Python bytecode at a time", "Threads still help for I/O-bound work", "CPU-bound parallelism needs processes"],
+      "references": [{"title": "Python glossary: Global interpreter lock", "url": "https://docs.python.org/3/glossary.html#term-global-interpreter-lock"}],
+      "tags": ["concurrency"]
+    }
+  ]
+}

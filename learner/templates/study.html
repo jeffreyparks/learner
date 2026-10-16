@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
+{% block title %}Study · {{ snap.collection.name }}{% endblock %}
+{% block content %}
+<div id="study" data-card-id="{{ card.id }}" data-format="{{ card.answer_format }}" data-dialect="{{ snap.collection.sql_dialect }}"
+     data-llm="{{ 'on' if ai_grading else 'off' }}" data-max-hints="{{ MAX_HINT_LEVEL }}">
+  <div class="study-meta">
+    <span>{{ snap.collection.name }} · {{ snap.collection.tier_label(tier) }}</span>
+    <span>{{ state.answered }} done · {{ state.remaining }} to go</span>
+  </div>
+
+  <section class="card-panel prompt">
+    <div class="prompt-head">
+      {{ status_badge(progress.status) }}
+      {% if card.tier != tier %}<span class="badge">refresher · tier {{ card.tier }}</span>{% endif %}
+    </div>
+    <div class="markdown">{{ card.prompt|md }}</div>
+  </section>
+
+  <form method="post" id="answer-form">
+    <input type="hidden" name="card_id" value="{{ card.id }}">
+    <input type="hidden" name="duration_ms" value="">
+    <input type="hidden" name="max_hint_level" value="0">
+    <input type="hidden" name="llm_verdict" value="">
+    <input type="hidden" name="llm_feedback" value="">
+
+    <section id="hints" class="hints" hidden>
+      <h4>Hints <span class="muted small">(a right answer after a hint counts, but doesn't build your streak)</span></h4>
+      <ol id="hint-list"></ol>
+    </section>
+
+    {# Every card gets an answer box: writing an answer out beats reciting it. #}
+    <textarea name="answer" id="answer-input" rows="{{ 5 if card.answer_format == 'text' else 8 }}" class="answer-input {% if card.answer_format != 'text' %}code{% endif %}"
+      {% if card.answer_format != 'text' %}data-editor="{{ card.answer_format }}"{% endif %}
+      placeholder="Write your answer{% if card.answer_format != 'text' %} ({{ card.answer_format }}){% endif %}…" spellcheck="false" autofocus></textarea>
+
+    <div class="actions" id="submit-row">
+      <button type="button" id="submit-answer" class="primary">Submit <kbd>Ctrl+Enter</kbd></button>
+      {% if ai_grading %}<button type="button" id="hint-button">Hint <kbd>Alt+H</kbd></button>{% endif %}
+      <span id="hint-status" class="muted small" aria-live="polite"></span>
+    </div>
+
+    <section id="answer" class="card-panel answer" hidden>
+      <div id="verdict" class="verdict" aria-live="polite" hidden></div>
+
+      <h3>Reference answer</h3>
+      <div class="markdown">{{ render_answer(card) }}</div>
+      {% if card.rubric %}
+      <h4>Key points</h4>
+      <ul>{% for point in card.rubric %}<li>{{ point }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if card.references %}
+      <h4>References</h4>
+      <ul class="references">{% for r in card.references %}<li><a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a></li>{% endfor %}</ul>
+      {% endif %}
+
+      <div class="actions grade">
+        <button type="submit" name="result" value="right" id="accept" class="primary" hidden>Accept <kbd>Enter</kbd></button>
+        <span id="grade-question">Did you get it right?</span>
+        <button type="submit" name="result" value="right" class="good" id="mark-right">Right <kbd>1</kbd></button>
+        <button type="submit" name="result" value="wrong" class="bad" id="mark-wrong">Wrong <kbd>2</kbd></button>
+      </div>
+    </section>
+  </form>
+
+  <p class="muted small">
+    <a href="/study/{{ snap.collection.id }}/{{ tier }}/{{ session_id }}/summary">End session</a>
+    · {% if ai_grading %}Graded by AI{% else %}No AI grader set up: you mark your own answers (<a href="/cards/draft">how to set it up</a>){% endif %}
+  </p>
+</div>
+{% endblock %}
