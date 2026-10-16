@@ -1,3 +1,3 @@
 # Secrets for Learner. Read every time the app starts; never committed (see .gitignore).
 # Paste your Anthropic API key after the = sign, save, then restart the app.
-ANTHROPIC_API_KEY=
+# ANTHROPIC_API_KEY=
