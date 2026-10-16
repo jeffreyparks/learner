@@ -132,6 +132,35 @@ def test_bulk_move_on_the_cards_page(tmp_path):
     client = client_for(tmp_path)
     page = client.get("/browse?collection_id=1&tier=1").text
     ids = re.findall(r'name="card_ids" value="(\d+)"', page)[:2]
-    moved = client.post("/cards/move", data={"collection_id": "1", "card_ids": ids, "to": "2", "back": "collection_id=1&tier=1"})
+    moved = client.post("/cards/move", data={"to_collection": "1", "card_ids": ids, "to": "2", "back": "collection_id=1&tier=1"})
     assert "Moved 2 cards." in moved.text
-    assert 'name="card_ids"' not in client.get("/browse").text  # no checkboxes without a single collection
+    assert 'name="card_ids"' in client.get("/browse").text  # checkboxes work across all collections
+
+
+def test_bulk_move_to_another_collection_and_tier(tmp_path):
+    client = client_for(tmp_path)
+    page = client.get("/browse?collection_id=1&tier=1").text
+    ids = re.findall(r'name="card_ids" value="(\d+)"', page)[:2]
+    moved = client.post("/cards/move", data={"to_collection": "2", "card_ids": ids, "to": "2", "back": "collection_id=1&tier=1"})
+    assert "Moved 2 cards." in moved.text
+    conn = store.connect(tmp_path / "w.db")
+    assert {store.get_card(conn, int(i)).collection_id for i in ids} == {2}
+    assert {store.get_card(conn, int(i)).tier for i in ids} == {2}
+    assert store.get_collection(conn, 1).tier_labels == {1: "Foundations", 2: "Intermediate"}  # source keeps its tiers
+    conn.close()
+
+
+def test_reset_restores_starter_and_keeps_a_backup(tmp_path):
+    client = client_for(tmp_path)
+    conn = store.connect(tmp_path / "w.db")
+    store.save_collection(conn, "Extra", "mysql", {1: "A"})
+    store.add_attempt(conn, store.list_cards(conn, 1)[0].id, "s1", "correct", answer="x")
+    conn.close()
+    assert "Type reset" in client.post("/reset", data={"confirm": "no"}).text
+    done = client.post("/reset", data={"confirm": "Reset"})
+    assert "Back to the starter collections" in done.text
+    conn = store.connect(tmp_path / "w.db")
+    assert [c.name for c in store.list_collections(conn)] == ["Python", "SQL"]
+    assert conn.execute("SELECT COUNT(*) FROM attempt").fetchone()[0] == 0
+    conn.close()
+    assert len(list((tmp_path / "backups").glob("learner-*.db"))) == 1

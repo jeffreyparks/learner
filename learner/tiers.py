@@ -123,7 +123,8 @@ def move_tier_cards(conn: sqlite3.Connection, collection_id: int, tier: int, to:
 
 
 def move_cards(conn: sqlite3.Connection, card_ids: list[int], collection_id: int, to: int) -> int:
-    """Move chosen cards of one collection into a tier (`to` may be N+1: a new tier at the end)."""
+    """Move chosen cards (from any collections) into a tier of `collection_id` (`to` may be N+1: a new
+    tier at the end). Source collections are tidied afterwards; their emptied tiers stay."""
     with conn:
         labels, max_unlocked = _state(conn, collection_id)
         if to == len(labels) + 1:
@@ -132,9 +133,10 @@ def move_cards(conn: sqlite3.Connection, card_ids: list[int], collection_id: int
         elif to not in labels:
             raise TierError("Choose an existing tier.")
         marks = ",".join("?" for _ in card_ids)
-        cur = conn.execute(f"UPDATE card SET tier = ? WHERE collection_id = ? AND id IN ({marks})",
-                           (to, collection_id, *card_ids))
-        _tidy(conn, collection_id)
+        sources = {c for (c,) in conn.execute(f"SELECT DISTINCT collection_id FROM card WHERE id IN ({marks})", card_ids)}
+        cur = conn.execute(f"UPDATE card SET collection_id = ?, tier = ? WHERE id IN ({marks})", (collection_id, to, *card_ids))
+        for cid in sources | {collection_id}:
+            _tidy(conn, cid)
         return cur.rowcount
 
 

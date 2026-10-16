@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,30 @@ def migrate(conn: sqlite3.Connection) -> None:
         problems = conn.execute("PRAGMA foreign_key_check").fetchall()
         if problems:
             raise RuntimeError(f"Database migration left broken references: {[tuple(r) for r in problems][:5]}")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+def backup(conn: sqlite3.Connection, folder: str | Path) -> Path:
+    """Copy the whole database to `folder/learner-<timestamp>.db` (a consistent snapshot, safe while in use)."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"learner-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+    with closing(sqlite3.connect(target)) as copy:
+        conn.backup(copy)
+    return target
+
+
+def wipe(conn: sqlite3.Connection) -> None:
+    """Delete every row of every table (the schema and its version stay). Callers re-seed afterwards."""
+    tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with conn:
+            for table in tables:
+                conn.execute(f'DELETE FROM "{table}"')
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_sequence'").fetchone():
+                conn.execute("DELETE FROM sqlite_sequence")
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
 

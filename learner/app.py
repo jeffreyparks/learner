@@ -137,6 +137,11 @@ def card_to_form(card: Card) -> dict[str, str]:
     }
 
 
+def seed_starter(conn: sqlite3.Connection) -> None:
+    for path in sorted((PACKAGE / "starter").glob("*.json")):
+        store.import_collection(conn, json.loads(path.read_text()))
+
+
 def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     """`provider` defaults to the one configured in `cfg` (None when LLM features are off)."""
     if provider is None:
@@ -145,8 +150,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     with closing(store.connect(db_path)) as conn:
         store.migrate(conn)
         if not store.list_collections(conn, include_archived=True):
-            for path in sorted((PACKAGE / "starter").glob("*.json")):
-                store.import_collection(conn, json.loads(path.read_text()))
+            seed_starter(conn)
         tiers.tidy_all(conn)  # every collection's tiers are 1…N with a label entry each (DESIGN.md §12.5)
 
     app = FastAPI(title="Learner", docs_url=None, redoc_url=None)
@@ -215,14 +219,14 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     # --- dashboard ---
 
     @app.get("/")
-    def dashboard(request: Request):
+    def dashboard(request: Request, reset: str = ""):
         with db() as conn:
             snapshots = [snapshot(conn, c) for c in store.list_collections(conn)]
             archived = [c for c in store.list_collections(conn, include_archived=True) if c.archived]
         groups: dict[str, list] = {}  # ungrouped ("") first, then groups A–Z (list_collections orders them)
         for s in snapshots:
             groups.setdefault(s.collection.group, []).append((s, engine.default_tier(s.tiers)))
-        return page(request, "dashboard.html", groups=list(groups.items()), archived=archived)
+        return page(request, "dashboard.html", groups=list(groups.items()), archived=archived, reset=reset)
 
     # --- study ---
 
@@ -395,20 +399,20 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
                     if (tier and card.tier != tier) or (status and card_status != status) or (tag and tag not in card.tags):
                         continue
                     rows.append((collection, card, card_status))
-        chosen = next((c for c in collections if c.id == collection_id), None)  # bulk moves need one collection
+        tier_choices = {c.id: [[t, c.tier_label(t)] for t in sorted(c.tier_labels)] for c in collections}
         return page(
-            request, "browse.html", rows=rows, collections=collections, tags=sorted(tags), chosen=chosen,
+            request, "browse.html", rows=rows, collections=collections, tags=sorted(tags), tier_choices=tier_choices,
             moved=q.get("moved"), back=str(request.url.query),
             filters={"collection_id": collection_id, "tier": tier, "status": status, "tag": tag, "archived": show_archived},
         )
 
     @app.post("/cards/move")
     async def cards_move(request: Request):
-        """Bulk "Move to tier…" from the Cards page (one collection at a time)."""
+        """Bulk "Move selected to…" from the Cards page: any collection, any tier (or a new one at the end)."""
         form = await request.form()
-        collection_id = _int(form.get("collection_id")) or 0
+        collection_id = _int(form.get("to_collection")) or 0
         card_ids = [i for v in form.getlist("card_ids") if (i := _int(v)) is not None]
-        back = form.get("back") or f"collection_id={collection_id}"
+        back = form.get("back") or ""
         with db() as conn:
             load_collection(conn, collection_id)
             to = tiers.count(conn, collection_id) + 1 if form.get("to") == NEW_TIER else (_int(form.get("to")) or 0)
@@ -831,6 +835,20 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         if not path.is_file():
             raise HTTPException(404, "Deck not found")
         return path
+
+    @app.post("/reset")
+    async def reset_everything(request: Request):
+        """Back to the two starter collections. A backup of the current database is saved first."""
+        form = await request.form()
+        if str(form.get("confirm", "")).strip().lower() != "reset":
+            return page(request, "import.html", result=None, text="", anki_files=anki_files(),
+                        reset_error="Type reset in the box to confirm.")
+        with db() as conn:
+            saved = store.backup(conn, db_path.resolve().parent / "backups")
+            store.wipe(conn)
+            seed_starter(conn)
+            tiers.tidy_all(conn)
+        return redirect(f"/?reset={quote(saved.name)}")
 
     @app.get("/import")
     def import_form(request: Request):

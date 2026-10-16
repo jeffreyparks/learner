@@ -37,4 +37,11 @@
   <label>…or paste JSON <textarea name="text" rows="10" class="code" spellcheck="false">{{ text }}</textarea></label>
   <div class="actions"><button type="submit" class="primary">Import</button></div>
 </form>
+<h2>Start over</h2>
+<p class="muted">Deletes every collection, card, image and answer, and puts back the two starter collections. A backup of the current database is saved in <code>backups/</code> first.</p>
+{% if reset_error %}<p class="notice">{{ reset_error }}</p>{% endif %}
+<form method="post" action="/reset" class="actions">
+  <input type="text" name="confirm" placeholder="type reset to confirm" autocomplete="off" aria-label="Type reset to confirm">
+  <button type="submit">Reset to starter collections</button>
+</form>
 {% endblock %}

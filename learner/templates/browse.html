@@ -25,17 +25,16 @@
 </form>
 
 {% if moved is not none %}<p class="notice">Moved {{ moved }} card{{ "" if moved == "1" else "s" }}.</p>{% endif %}
-<p class="muted small">{{ rows|length }} card{{ "" if rows|length == 1 else "s" }}{% if not chosen and rows %} · filter to one collection to move cards between its tiers{% endif %}</p>
-{% if chosen %}<form method="post" action="/cards/move" id="move-form">
-  <input type="hidden" name="collection_id" value="{{ chosen.id }}">
-  <input type="hidden" name="back" value="{{ back }}">{% endif %}
+<p class="muted small">{{ rows|length }} card{{ "" if rows|length == 1 else "s" }}{% if not chosen and rows %}{% endif %}</p>
+<form method="post" action="/cards/move" id="move-form">
+  <input type="hidden" name="back" value="{{ back }}">
 <div class="table-wrap">
 <table class="cards">
-  <thead><tr>{% if chosen %}<th><input type="checkbox" id="select-all" aria-label="Select all"></th>{% endif %}<th>Prompt</th><th>Collection</th><th>Tier</th><th>Format</th><th>Status</th><th>Tags</th></tr></thead>
+  <thead><tr><th><input type="checkbox" id="select-all" aria-label="Select all"></th><th>Prompt</th><th>Collection</th><th>Tier</th><th>Format</th><th>Status</th><th>Tags</th></tr></thead>
   <tbody>
   {% for collection, card, status in rows %}
     <tr>
-      {% if chosen %}<td><input type="checkbox" name="card_ids" value="{{ card.id }}" aria-label="Select card"></td>{% endif %}
+      <td><input type="checkbox" name="card_ids" value="{{ card.id }}" aria-label="Select card"></td>
       <td><a href="/cards/{{ card.id }}">{{ card.prompt|card_title }}</a></td>
       <td>{{ collection.display_name }}</td>
       <td>{{ card.tier }}</td>
@@ -49,19 +48,27 @@
   </tbody>
 </table>
 </div>
-{% if chosen and rows %}
+{% if rows %}
 <div class="actions">
   <span>Move selected to</span>
-  <select name="to" aria-label="Target tier">
-    {% for t in chosen.tier_labels|dictsort %}<option value="{{ t[0] }}">{{ chosen.tier_label(t[0]) }}</option>{% endfor %}
-    <option value="{{ NEW_TIER }}">+ New tier at the end</option>
+  <select name="to_collection" id="move-collection" aria-label="Target collection">
+    {% for c in collections %}<option value="{{ c.id }}" {% if filters.collection_id == c.id %}selected{% endif %}>{{ c.display_name }}</option>{% endfor %}
   </select>
+  <select name="to" id="move-tier" aria-label="Target tier"></select>
   <button type="submit" class="primary">Move</button>
 </div>
-</form>
 <script type="module">
+  const choices = {{ tier_choices|tojson }};
+  const newTier = {{ NEW_TIER|tojson }};
   const all = document.getElementById("select-all");
   all?.addEventListener("change", () => document.querySelectorAll('input[name="card_ids"]').forEach((c) => { c.checked = all.checked; }));
+  const coll = document.getElementById("move-collection"), tier = document.getElementById("move-tier");
+  const fill = () => {
+    tier.replaceChildren(...(choices[coll.value] || []).map(([n, l]) => new Option(l, n)), new Option("+ New tier at the end", newTier));
+  };
+  coll.addEventListener("change", fill);
+  fill();
 </script>
-{% elif chosen %}</form>{% endif %}
+{% endif %}
+</form>
 {% endblock %}

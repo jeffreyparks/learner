@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% if reset %}<p class="notice">Back to the starter collections. The previous data is saved as <code>backups/{{ reset }}</code>.</p>{% endif %}
 <div class="page-head">
   <h1>Collections</h1>
   <span class="actions-inline">
