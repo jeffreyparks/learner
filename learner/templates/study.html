@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_badge %}
-{% block title %}Study · {{ snap.collection.name }}{% endblock %}
+{% block title %}Study · {{ snap.collection.display_name }}{% endblock %}
 {% block content %}
 <div id="study" data-card-id="{{ card.id }}" data-format="{{ card.answer_format }}" data-dialect="{{ snap.collection.sql_dialect }}"
      data-llm="{{ 'on' if ai_grading else 'off' }}" data-max-hints="{{ MAX_HINT_LEVEL }}">
   <div class="study-meta">
-    <span>{{ snap.collection.name }} · {{ snap.collection.tier_label(tier) }}</span>
+    <span>{{ snap.collection.display_name }} · {{ snap.collection.tier_label(tier) }}</span>
     <span>{{ state.answered }} done · {{ state.remaining }} to go</span>
   </div>
 

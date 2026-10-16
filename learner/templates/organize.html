@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list %}
+{% block title %}Combine collections · Learner{% endblock %}
+{% block content %}
+<h1>Combine collections</h1>
+{{ errors_list(errors) }}
+
+{% if result %}
+{% set r, target = result %}
+<div class="notice">
+  <strong>{{ target.display_name }}</strong> now has {{ target.tier_labels|length }} tier{{ "" if target.tier_labels|length == 1 else "s" }}
+  ({{ r.moved }} card{{ "" if r.moved == 1 else "s" }} moved; progress and history kept).
+  {% if r.archived %}Emptied and archived: {{ r.archived|join(", ") }}.{% endif %}
+</div>
+<div class="actions">
+  <a class="button primary" href="/collections/{{ target.id }}/order">Card order</a>
+  <a class="button secondary" href="/">Dashboard</a>
+  <a class="button secondary" href="/collections/organize">Combine more</a>
+</div>
+
+{% elif not ids %}
+<p class="muted">Pick the collections to combine. Their tiers become tiers of one collection, which you can name and order next
+  (by hand, or with an AI-suggested order). Pick a single collection to get an AI-suggested order for its tiers; for hand edits, use the Tiers panel on its Edit page.</p>
+<form method="get" action="/collections/organize" class="stacked">
+  <ul class="plain-list pick-list">
+    {% for c in collections %}<li><label class="check"><input type="checkbox" name="ids" value="{{ c.id }}"> {{ c.display_name }}</label></li>{% endfor %}
+  </ul>
+  <div class="actions"><button type="submit" class="primary">Next</button> <a class="button secondary" href="/">Cancel</a></div>
+</form>
+
+{% else %}
+<form method="post" action="/collections/organize/apply" id="organize-form">
+  {% for i in ids %}<input type="hidden" name="ids" value="{{ i }}">{% endfor %}
+  <section class="card-panel">
+    <div class="row stacked-inline">
+      <label>Combined collection name <input type="text" name="name" value="{{ target_name }}" required></label>
+      <label>Group <span class="hint">optional</span> <input type="text" name="group" value="{{ group }}"></label>
+    </div>
+    <p class="muted small">Use a new name, or the name of one of the collections below to combine into it. Each row is one tier of a current collection;
+      choose its tier in the combined collection. Give rows the same number to merge them into one tier.</p>
+    <table class="cards tier-table">
+      <thead><tr><th>Tier</th><th>Tier label</th><th>From</th><th>Cards</th><th>For example</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><select name="tier_{{ row.key }}" aria-label="Tier for {{ row.label }}">
+            {% for t in tier_options %}<option value="{{ t }}" {% if mapping[row.key].tier == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+          </select></td>
+          <td><input type="text" name="label_{{ row.key }}" value="{{ mapping[row.key].label }}" aria-label="Tier label"></td>
+          <td>{{ row.label }}</td>
+          <td>{{ row.count }}</td>
+          <td class="muted small">{{ (row.prompts[0] if row.prompts else "")|truncate(60) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% if warnings %}<div class="notice warn-notice"><ul class="plain-list">{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="actions">
+    <button type="submit" class="primary" id="apply-button">Combine</button>
+    <button type="submit" formaction="/collections/organize/preview">Update</button>
+    {% if ai_grading %}<button type="submit" name="suggest" value="1" formaction="/collections/organize/preview" id="suggest-button">Suggest tier order with AI</button>{% endif %}
+    <a class="button secondary" href="/collections/organize">Back</a>
+  </div>
+  <p class="muted small">Cards keep their progress, history and concepts. Collections left empty are archived, not deleted.
+    Afterwards, rebuild the Card order so new cards come in a sensible order within each tier.</p>
+</form>
+{% endif %}
+<script type="module">
+  const form = document.getElementById("organize-form");
+  form?.addEventListener("submit", (e) => {
+    const b = e.submitter;
+    if (!b) return;
+    b.textContent = b.id === "suggest-button" ? "Asking the AI…" : b.id === "apply-button" ? "Combining…" : "Updating…";
+    setTimeout(() => form.querySelectorAll("button").forEach((x) => { x.disabled = true; }));
+  });
+</script>
+{% endblock %}

@@ -6,7 +6,7 @@
   <form method="get" class="filters">
     <select name="collection_id" aria-label="Collection" onchange="this.form.submit()">
       <option value="">All collections</option>
-      {% for c in collections %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      {% for c in collections %}<option value="{{ c.id }}" {% if selected == c.id %}selected{% endif %}>{{ c.display_name }}</option>{% endfor %}
     </select>
     <noscript><button type="submit">Show</button></noscript>
   </form>

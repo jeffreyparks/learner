@@ -16,7 +16,8 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
@@ -24,7 +25,7 @@ from markupsafe import Markup, escape
 from pydantic import BaseModel, ValidationError
 
 from . import config as config_module
-from . import checkers, engine, sequencer, stats, store, tutor
+from . import anki, checkers, engine, media, organize, sequencer, stats, store, tiers, tutor
 from .config import Config
 from .llm import LLMError, LLMProvider, make_provider
 from .models import ANSWER_FORMATS, SQL_DIALECTS, Card, CardIn, Collection, CollectionIn, describe_errors
@@ -32,6 +33,7 @@ from .models import ANSWER_FORMATS, SQL_DIALECTS, Card, CardIn, Collection, Coll
 PACKAGE = Path(__file__).parent
 LOCAL_HOSTS = ("127.0.0.1", "localhost")
 NEW_COLLECTION = "new"  # the card form's "+ New collection…" option
+NEW_TIER = "new"  # the card form's "+ New tier at the end" option
 _markdown = MarkdownIt("commonmark", {"html": False}).enable("table")
 
 
@@ -135,17 +137,6 @@ def card_to_form(card: Card) -> dict[str, str]:
     }
 
 
-def parse_tier_labels(text: str) -> dict[int, str]:
-    """One per line: '1: Foundations'."""
-    labels = {}
-    for line in _lines(text):
-        match = re.fullmatch(r"(\d+)\s*[:=]\s*(.+)", line)
-        if not match:
-            raise ValueError(f"Tier labels: couldn't read “{line}”. Use one per line, like “1: Foundations”.")
-        labels[int(match[1])] = match[2].strip()
-    return labels
-
-
 def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     """`provider` defaults to the one configured in `cfg` (None when LLM features are off)."""
     if provider is None:
@@ -156,6 +147,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         if not store.list_collections(conn, include_archived=True):
             for path in sorted((PACKAGE / "starter").glob("*.json")):
                 store.import_collection(conn, json.loads(path.read_text()))
+        tiers.tidy_all(conn)  # every collection's tiers are 1…N with a label entry each (DESIGN.md §12.5)
 
     app = FastAPI(title="Learner", docs_url=None, redoc_url=None)
 
@@ -181,6 +173,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         MAX_HINT_LEVEL=tutor.MAX_HINT_LEVEL,
         SQL_DIALECTS=SQL_DIALECTS,
         NEW_COLLECTION=NEW_COLLECTION,
+        NEW_TIER=NEW_TIER,
         cfg=cfg,
         ai_off_by_choice=cfg.provider == "off",
     )
@@ -199,11 +192,13 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         cards = store.list_cards(conn, collection.id)
         attempts = store.list_attempts(conn, collection.id)
         progress = engine.progress_map(cards, attempts, cfg.known_streak)
-        unlocked = engine.unlocked_through(cards, progress, collection.max_unlocked_tier, cfg.unlock_pct)
+        all_tiers = sorted(collection.tier_labels)
+        unlocked = engine.unlocked_through(cards, progress, collection.max_unlocked_tier, cfg.unlock_pct, all_tiers)
         if unlocked > collection.max_unlocked_tier:
             store.raise_unlocked_tier(conn, collection.id, unlocked)
         order = sequencer.build(cards, store.list_analyses(conn, collection.id))
-        return Snapshot(collection, cards, attempts, progress, engine.tier_summaries(cards, progress, unlocked), order)
+        summaries = engine.tier_summaries(cards, progress, unlocked, all_tiers)
+        return Snapshot(collection, cards, attempts, progress, summaries, order)
 
     def load_collection(conn, collection_id: int) -> Collection:
         collection = store.get_collection(conn, collection_id)
@@ -224,8 +219,10 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         with db() as conn:
             snapshots = [snapshot(conn, c) for c in store.list_collections(conn)]
             archived = [c for c in store.list_collections(conn, include_archived=True) if c.archived]
-        items = [(s, engine.default_tier(s.tiers)) for s in snapshots]
-        return page(request, "dashboard.html", items=items, archived=archived)
+        groups: dict[str, list] = {}  # ungrouped ("") first, then groups A–Z (list_collections orders them)
+        for s in snapshots:
+            groups.setdefault(s.collection.group, []).append((s, engine.default_tier(s.tiers)))
+        return page(request, "dashboard.html", groups=list(groups.items()), archived=archived)
 
     # --- study ---
 
@@ -234,8 +231,8 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         with db() as conn:
             snap = snapshot(conn, load_collection(conn, collection_id))
         summary = snap.tier(tier)
-        if summary is None:
-            raise HTTPException(404, "That tier has no cards")
+        if summary is None or not summary.total:  # missing or empty: nothing to study
+            return redirect("/")
         if not summary.unlocked and not confirm:
             previous = max((t for t in snap.tiers if t.tier < tier), key=lambda t: t.tier, default=None)
             return page(request, "study_locked.html", snap=snap, tier=summary, previous=previous)
@@ -299,20 +296,22 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     # Plain `def` handlers: FastAPI runs them on a worker thread, so a slow LLM call never
     # blocks the rest of the app (syntax checks, other pages). The same goes for /check below.
 
-    def card_and_dialect(card_id: int) -> tuple[Card, str]:
+    def card_and_dialect(card_id: int) -> tuple[Card, str, list[tuple[str, bytes]]]:
+        """The card, its collection's SQL dialect, and the images it shows (for the AI to see)."""
         with db() as conn:
             card = load_card(conn, card_id)
-            return card, load_collection(conn, card.collection_id).sql_dialect
+            images = [(i.mime, i.data) for i in media.images_for(conn, card.prompt, card.reference_answer)]
+            return card, load_collection(conn, card.collection_id).sql_dialect, images
 
     @app.post("/grade")
     def grade_answer(body: TutorRequest):
-        card, dialect = card_and_dialect(body.card_id)
+        card, dialect, images = card_and_dialect(body.card_id)
         if provider is None:
             return {"error": "No LLM is configured."}
         if not body.answer.strip():
             return {"error": "Nothing to grade."}
         try:
-            grade = tutor.grade(provider, card, body.answer, dialect)
+            grade = tutor.grade(provider, card, body.answer, dialect, images)
         except LLMError as exc:
             return {"error": str(exc)}
         return {
@@ -323,15 +322,49 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
 
     @app.post("/hint")
     def give_hint(body: TutorRequest):
-        card, dialect = card_and_dialect(body.card_id)
+        card, dialect, images = card_and_dialect(body.card_id)
         if provider is None:
             return {"error": "No LLM is configured."}
         earlier = body.earlier[: tutor.MAX_HINT_LEVEL]
         level = body.level or len(earlier) + 1
         try:
-            return {"hint": tutor.hint(provider, card, body.answer, level, earlier, dialect), "level": level}
+            return {"hint": tutor.hint(provider, card, body.answer, level, earlier, dialect, images), "level": level}
         except LLMError as exc:
             return {"error": str(exc)}
+
+    # --- images (DESIGN.md §12.1) ---
+
+    max_image_bytes = int(cfg.max_image_mb * 1_000_000)
+
+    @app.post("/media")
+    async def media_upload(request: Request):
+        """Store an uploaded or pasted image; returns the Markdown to insert into the card."""
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            return JSONResponse({"error": "No image received."}, status_code=400)
+        data = await upload.read(max_image_bytes + 1)
+        alt = (form.get("alt") or "").strip().replace("]", ")").replace("\n", " ")
+        try:
+            with db() as conn:
+                image = media.save_image(conn, data, getattr(upload, "filename", "") or "", alt, max_image_bytes)
+        except media.MediaError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return {"url": image.url, "markdown": f"![{alt or 'image'}]({image.url})", "sha256": image.sha256}
+
+    @app.get("/media/{sha256}")
+    def media_get(sha256: str):
+        if not re.fullmatch(r"[0-9a-f]{64}", sha256):
+            raise HTTPException(404, "Image not found")
+        with db() as conn:
+            image = media.get_image(conn, sha256)
+        if image is None:
+            raise HTTPException(404, "Image not found")
+        # Content never changes for a given fingerprint, so browsers can cache it for good.
+        return Response(image.data, media_type=image.mime, headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        })
 
     # --- syntax checking (called by the code editor as you type) ---
 
@@ -362,25 +395,47 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
                     if (tier and card.tier != tier) or (status and card_status != status) or (tag and tag not in card.tags):
                         continue
                     rows.append((collection, card, card_status))
+        chosen = next((c for c in collections if c.id == collection_id), None)  # bulk moves need one collection
         return page(
-            request, "browse.html", rows=rows, collections=collections, tags=sorted(tags),
+            request, "browse.html", rows=rows, collections=collections, tags=sorted(tags), chosen=chosen,
+            moved=q.get("moved"), back=str(request.url.query),
             filters={"collection_id": collection_id, "tier": tier, "status": status, "tag": tag, "archived": show_archived},
         )
+
+    @app.post("/cards/move")
+    async def cards_move(request: Request):
+        """Bulk "Move to tier…" from the Cards page (one collection at a time)."""
+        form = await request.form()
+        collection_id = _int(form.get("collection_id")) or 0
+        card_ids = [i for v in form.getlist("card_ids") if (i := _int(v)) is not None]
+        back = form.get("back") or f"collection_id={collection_id}"
+        with db() as conn:
+            load_collection(conn, collection_id)
+            to = tiers.count(conn, collection_id) + 1 if form.get("to") == NEW_TIER else (_int(form.get("to")) or 0)
+            try:
+                moved = tiers.move_cards(conn, card_ids, collection_id, to) if card_ids else 0
+            except tiers.TierError:
+                moved = 0
+        query = "&".join(p for p in back.split("&") if not p.startswith("moved="))
+        return redirect(f"/browse?{query}&moved={moved}")
 
     def card_page(request, conn, form, errors=(), card=None):
         progress = None
         if card is not None:
             snap = snapshot(conn, load_collection(conn, card.collection_id))
             progress = snap.progress.get(card.id)
+        collections = store.list_collections(conn)
+        # Each collection's real tiers, for the Tier dropdown (rebuilt in the browser when the collection changes).
+        tier_choices = {c.id: [[t, c.tier_label(t)] for t in sorted(c.tier_labels)] for c in collections}
         return page(
             request, "card_form.html", form=form, errors=list(errors), card=card, progress=progress,
-            collections=store.list_collections(conn),
+            collections=collections, groups=store.list_groups(conn), tier_choices=tier_choices,
         )
 
     @app.get("/cards/new")
-    def card_new(request: Request, collection_id: str = ""):
+    def card_new(request: Request, collection_id: str = "", tier: str = ""):
         with db() as conn:
-            return card_page(request, conn, {"collection_id": collection_id, "tier": "1", "answer_format": "text"})
+            return card_page(request, conn, {"collection_id": collection_id, "tier": tier or "1", "answer_format": "text"})
 
     @app.get("/cards/{card_id:int}")
     def card_edit(request: Request, card_id: int):
@@ -406,20 +461,28 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         form = dict(await request.form())
         with db() as conn:
             card = load_card(conn, card_id) if card_id else None
+            new_tier = form.get("tier") == NEW_TIER
             try:
-                data = card_from_form(form)
+                data = card_from_form(form | ({"tier": "1"} if new_tier else {}))
             except ValidationError as exc:
                 return card_page(request, conn, form, describe_errors(exc), card)
             if form.get("collection_id") == NEW_COLLECTION:
                 name = (form.get("new_collection") or "").strip()
+                group = (form.get("new_collection_group") or "").strip()
                 if not name:
                     return card_page(request, conn, form, ["Give the new collection a name."], card)
-                if store.find_collection(conn, name):
+                if store.find_collection(conn, name, group):
                     return card_page(request, conn, form, [f"“{name}” already exists: choose it from the list."], card)
-                form["collection_id"] = str(store.save_collection(conn, name, "mysql", {}))
+                form["collection_id"] = str(store.save_collection(conn, name, "mysql", {}, group=group))
             collection_id = _int(form.get("collection_id"))
             if collection_id is None or store.get_collection(conn, collection_id) is None:
                 return card_page(request, conn, form, ["Choose a collection."], card)
+            # Only real tiers (or a new one at the end) can be chosen, so labels never fall out of step.
+            tier_count = tiers.count(conn, collection_id)
+            if new_tier or tier_count == 0:
+                data = data.model_copy(update={"tier": tiers.add(conn, collection_id)})
+            elif data.tier > tier_count:
+                return card_page(request, conn, form, ["Choose one of the collection's tiers."], card)
             if card is not None:
                 data = data.model_copy(update={"archived": card.archived})
             saved_id, _ = store.save_card(conn, collection_id, data, card_id)
@@ -439,7 +502,9 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         with db() as conn:
             card = load_card(conn, card_id)
             store.set_card_archived(conn, card_id, not card.archived)
-        return redirect(f"/cards/{card_id}")
+            # Back from the archive into a tier that was deleted meanwhile? It goes to the last tier.
+            moved = card.archived and tiers.place_unarchived(conn, card_id)
+        return redirect(f"/cards/{card_id}" + ("?moved_tier=1" if moved else ""))
 
     @app.post("/cards/{card_id:int}/reset")
     def card_reset(card_id: int):
@@ -451,50 +516,90 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     # --- collections ---
 
     def collection_page(request, form, errors=(), collection=None):
-        return page(request, "collection_form.html", form=form, errors=list(errors), collection=collection)
+        with db() as conn:
+            groups = store.list_groups(conn)
+            snap = snapshot(conn, load_collection(conn, collection.id)) if collection else None
+        return page(request, "collection_form.html", form=form, errors=list(errors), collection=collection, groups=groups,
+                    snap=snap, notice=request.query_params.get("tiers"))
 
     @app.get("/collections/new")
     def collection_new(request: Request):
-        return collection_page(request, {"sql_dialect": "mysql", "tier_labels": "1: Foundations\n2: Intermediate\n3: Advanced"})
+        return collection_page(request, {"sql_dialect": "mysql", "tiers": "Foundations\nIntermediate\nAdvanced"})
 
-    @app.get("/collections/{collection_id}")
+    @app.get("/collections/{collection_id:int}")
     def collection_edit(request: Request, collection_id: int):
         with db() as conn:
             c = load_collection(conn, collection_id)
-        labels = "\n".join(f"{k}: {v}" for k, v in sorted(c.tier_labels.items()))
-        return collection_page(request, {"name": c.name, "sql_dialect": c.sql_dialect, "tier_labels": labels}, collection=c)
+        return collection_page(request, {"name": c.name, "group": c.group, "sql_dialect": c.sql_dialect}, collection=c)
 
     async def save_collection_form(request: Request, collection_id: int | None):
         form = dict(await request.form())
         with db() as conn:
             collection = load_collection(conn, collection_id) if collection_id else None
             try:
-                labels = parse_tier_labels(form.get("tier_labels", ""))
-                data = CollectionIn(collection=form.get("name", ""), sql_dialect=form.get("sql_dialect", "mysql"), tier_labels=labels)
-                saved_id = store.save_collection(conn, data.collection, data.sql_dialect, data.tier_labels, collection_id)
+                # Tiers are set here only when creating; after that, the Tiers panel owns them.
+                labels = collection.tier_labels if collection else {
+                    i: line for i, line in enumerate(_lines(form.get("tiers", "")), start=1)}
+                data = CollectionIn(collection=form.get("name", ""), group=form.get("group", ""),
+                                    sql_dialect=form.get("sql_dialect", "mysql"), tier_labels=labels)
+                saved_id = store.save_collection(conn, data.collection, data.sql_dialect, data.tier_labels,
+                                                 collection_id, group=data.group)
             except ValueError as exc:  # includes pydantic's ValidationError
                 errors = describe_errors(exc) if isinstance(exc, ValidationError) else [str(exc)]
                 return collection_page(request, form, errors, collection)
             except sqlite3.IntegrityError:
-                return collection_page(request, form, ["A collection with that name already exists."], collection)
+                return collection_page(request, form, ["A collection with that name already exists in that group."], collection)
         return redirect(f"/collections/{saved_id}?saved=1")
 
     @app.post("/collections/new")
     async def collection_create(request: Request):
         return await save_collection_form(request, None)
 
-    @app.post("/collections/{collection_id}")
+    @app.post("/collections/{collection_id:int}")
     async def collection_update(request: Request, collection_id: int):
         return await save_collection_form(request, collection_id)
 
-    @app.post("/collections/{collection_id}/archive")
+    @app.post("/collections/{collection_id:int}/tiers")
+    async def collection_tiers(request: Request, collection_id: int):
+        """The Tiers panel: labels are saved with every action, then the action (op) runs."""
+        form = await request.form()
+        op, _, arg = (form.get("op") or "save").partition(":")
+        tier = _int(arg)
+        with db() as conn:
+            load_collection(conn, collection_id)
+            labels = {t: form.get(f"label_{t}", "") for t in range(1, tiers.count(conn, collection_id) + 1)}
+            tiers.set_labels(conn, collection_id, labels)
+            try:
+                if op == "up":
+                    tiers.swap(conn, collection_id, tier, tier - 1)
+                    message = f"Moved tier {tier} up."
+                elif op == "down":
+                    tiers.swap(conn, collection_id, tier, tier + 1)
+                    message = f"Moved tier {tier} down."
+                elif op == "move":
+                    to = _int(form.get(f"move_to_{tier}"))
+                    moved = tiers.move_tier_cards(conn, collection_id, tier, to)
+                    message = f"Moved {moved} card{'' if moved == 1 else 's'} from tier {tier} to tier {to}."
+                elif op == "delete":
+                    archived = tiers.delete(conn, collection_id, tier)
+                    message = f"Deleted tier {tier}" + (f" and archived its {archived} card{'' if archived == 1 else 's'}." if archived else ".")
+                elif op == "add":
+                    new = tiers.add(conn, collection_id, form.get("new_label", ""))
+                    message = f"Added tier {new}."
+                else:
+                    message = "Tier names saved."
+            except tiers.TierError as exc:
+                message = str(exc)
+        return redirect(f"/collections/{collection_id}?tiers={quote(message)}#tiers")
+
+    @app.post("/collections/{collection_id:int}/archive")
     def collection_archive(collection_id: int):
         with db() as conn:
             c = load_collection(conn, collection_id)
             store.set_collection_archived(conn, collection_id, not c.archived)
         return redirect(f"/collections/{collection_id}")
 
-    @app.get("/collections/{collection_id}/export")
+    @app.get("/collections/{collection_id:int}/export")
     def collection_export(collection_id: int):
         with db() as conn:
             c = load_collection(conn, collection_id)
@@ -589,9 +694,83 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             weak_cards=stats.weakest_cards(cards, progress), progress=progress,
         )
 
+    # --- combine and re-tier collections (DESIGN.md §12.4) ---
+
+    def organize_page(request, ids: list[int], name: str, group: str, mapping, warnings=(), errors=(), result=None):
+        with db() as conn:
+            collections = store.list_collections(conn)
+            rows = organize.rows_for(conn, ids)
+        ordered = sorted(rows, key=lambda r: (mapping[r.key].tier, rows.index(r))) if mapping else rows
+        return page(request, "organize.html", collections=collections, ids=ids, rows=ordered, target_name=name, group=group,
+                    mapping=mapping, warnings=list(warnings), errors=list(errors), result=result,
+                    tier_options=range(1, 21))
+
+    def chosen_ids(values) -> list[int]:
+        return list(dict.fromkeys(i for v in values if (i := _int(v)) is not None))
+
+    def mapping_from_form(form, rows: list[organize.Row], defaults: dict[str, organize.Mapping]) -> dict[str, organize.Mapping]:
+        return {
+            r.key: organize.Mapping(max(1, _int(form.get(f"tier_{r.key}")) or defaults[r.key].tier),
+                                    (form.get(f"label_{r.key}") if form.get(f"label_{r.key}") is not None else defaults[r.key].label).strip())
+            for r in rows
+        }
+
+    @app.get("/collections/organize")
+    def organize_start(request: Request):
+        ids = chosen_ids(request.query_params.getlist("ids"))
+        if not ids:
+            return organize_page(request, [], "", "", {})
+        with db() as conn:
+            chosen = [c for i in ids if (c := store.get_collection(conn, i))]
+            rows = organize.rows_for(conn, ids)
+        if not rows:
+            return organize_page(request, [], "", "", {}, errors=["Those collections have no cards."])
+        name = organize.suggested_name(chosen)
+        group = chosen[0].group if len({c.group for c in chosen}) == 1 else ""
+        return organize_page(request, ids, name, group, organize.default_mapping(rows, name))
+
+    @app.post("/collections/organize/preview")
+    async def organize_preview(request: Request):
+        """Re-show with your edits; with suggest=1, ask the AI for a study order first."""
+        form = await request.form()
+        ids = chosen_ids(form.getlist("ids"))
+        name, group = (form.get("name") or "").strip(), (form.get("group") or "").strip()
+        with db() as conn:
+            rows = organize.rows_for(conn, ids)
+        mapping = mapping_from_form(form, rows, organize.default_mapping(rows, name))
+        warnings = []
+        if form.get("suggest"):
+            if provider is None:
+                warnings.append("Suggesting an order needs AI, and none is set up.")
+            else:
+                try:
+                    labels = await run_in_threadpool(
+                        tutor.order_subdecks, provider, name or "Combined collection", [(r.label, r.prompts) for r in rows])
+                    by_label = {r.label: r.key for r in rows}
+                    suggested = organize.default_mapping(rows, name, [by_label[label] for label in labels])
+                    mapping = {k: organize.Mapping(suggested[k].tier, mapping[k].label) for k in mapping}
+                except LLMError as exc:
+                    warnings.append(f"Couldn't suggest an order ({exc}).")
+        return organize_page(request, ids, name, group, mapping, warnings)
+
+    @app.post("/collections/organize/apply")
+    async def organize_apply(request: Request):
+        form = await request.form()
+        ids = chosen_ids(form.getlist("ids"))
+        name, group = (form.get("name") or "").strip(), (form.get("group") or "").strip()
+        with db() as conn:
+            rows = organize.rows_for(conn, ids)
+            mapping = mapping_from_form(form, rows, organize.default_mapping(rows, name))
+            try:
+                result = organize.apply(conn, rows, mapping, name, group)
+            except organize.OrganizeError as exc:
+                return organize_page(request, ids, name, group, mapping, errors=[str(exc)])
+            target = store.get_collection(conn, result.collection_id)
+        return organize_page(request, [], "", "", {}, result=(result, target))
+
     # --- card order (sequencing) ---
 
-    @app.get("/collections/{collection_id}/order")
+    @app.get("/collections/{collection_id:int}/order")
     def order_page(request: Request, collection_id: int):
         with db() as conn:
             snap = snapshot(conn, load_collection(conn, collection_id))
@@ -627,7 +806,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
                 errors.append(f"{collection.tier_label(tier)}: the AI skipped {skipped} card(s); they stay at the end.")
         return errors
 
-    @app.post("/collections/{collection_id}/order/rebuild")
+    @app.post("/collections/{collection_id:int}/order/rebuild")
     def order_rebuild(collection_id: int):  # plain `def`: one slow AI call per tier
         if provider is None:
             return redirect(f"/collections/{collection_id}/order?error=" + quote("Ordering needs AI, and none is set up. See the note above."))
@@ -638,16 +817,37 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
 
     # --- import ---
 
+    # Anki decks are read from the imports/ folder next to the database (uploads are saved there too).
+    imports_dir = db_path.resolve().parent / "imports"
+
+    def anki_files() -> list[str]:
+        return sorted(p.name for p in imports_dir.glob("*.apkg") if p.is_file()) if imports_dir.is_dir() else []
+
+    def anki_path(name: str) -> Path:
+        """Only plain .apkg file names inside imports/ (never a path someone typed into the URL)."""
+        if not name or name != Path(name).name or not name.lower().endswith(".apkg"):
+            raise HTTPException(404, "Deck not found")
+        path = imports_dir / name
+        if not path.is_file():
+            raise HTTPException(404, "Deck not found")
+        return path
+
     @app.get("/import")
     def import_form(request: Request):
-        return page(request, "import.html", result=None, text="")
+        return page(request, "import.html", result=None, text="", anki_files=anki_files())
 
     @app.post("/import")
     async def import_run(request: Request):
         form = await request.form()
         upload = form.get("file")
         text = form.get("text", "")
-        if upload is not None and getattr(upload, "filename", ""):
+        filename = getattr(upload, "filename", "") or ""
+        if filename.lower().endswith(".apkg"):  # an Anki deck: keep it in imports/ and show the preview
+            safe = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(filename).name)[:120]
+            imports_dir.mkdir(exist_ok=True)
+            (imports_dir / safe).write_bytes(await upload.read())
+            return redirect(f"/import/anki?file={quote(safe)}")
+        if upload is not None and filename:
             text = (await upload.read()).decode("utf-8", errors="replace")
         result = store.ImportResult()
         if not text.strip():
@@ -660,7 +860,89 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             else:
                 with db() as conn:
                     result = store.import_collection(conn, data)
-        return page(request, "import.html", result=result, text=text if result.errors else "")
+                    if result.collection_id:
+                        tiers.tidy(conn, result.collection_id)
+        return page(request, "import.html", result=result, text=text if result.errors else "", anki_files=anki_files())
+
+    def read_deck(name: str) -> anki.AnkiDeck:
+        return anki.read_apkg(anki_path(name).read_bytes())
+
+    def choices_from_form(form, parents: list[anki.ParentDeck], defaults: list[anki.DeckChoice]) -> list[anki.DeckChoice]:
+        """The layout you chose on the preview (fields mode_i, collection_i, group_i, tier_i_j)."""
+        choices = []
+        for i, (parent, default) in enumerate(zip(parents, defaults)):
+            mode = form.get(f"mode_{i}") if form.get(f"mode_{i}") in ("tiers", "collections") else default.mode
+            tiers = {sub.label: max(1, _int(form.get(f"tier_{i}_{j}")) or default.tiers[sub.label])
+                     for j, sub in enumerate(parent.subdecks)}
+            choices.append(anki.DeckChoice(mode, (form.get(f"collection_{i}") or default.collection).strip(),
+                                           (form.get(f"group_{i}") or "").strip(), tiers))
+        return choices
+
+    def anki_page(request, file, deck, choices, warnings=(), errors=(), done=False, plans=None):
+        if plans is None:
+            with db() as conn:
+                plans = anki.plan_import(conn, deck, choices)
+        parents = anki.parent_decks(deck)
+        # Show each deck's subdecks in tier order; `j` keeps the form field tied to the subdeck.
+        rows = [sorted(enumerate(p.subdecks), key=lambda js: (c.tiers[js[1].label], js[0])) for p, c in zip(parents, choices)]
+        return page(request, "anki.html", file=file, deck=deck, parents=list(zip(parents, choices, rows)), plans=plans,
+                    warnings=list(warnings), errors=list(errors), done=done, tier_options=range(1, 13), parent_itself=anki.PARENT_ITSELF)
+
+    def anki_error(request, file, exc):
+        return page(request, "anki.html", file=file, deck=None, parents=[], plans=[], warnings=[], errors=[str(exc)], done=False)
+
+    @app.get("/import/anki")
+    def anki_preview(request: Request, file: str = ""):  # plain `def`: reading a deck can take a moment
+        try:
+            deck = read_deck(file)
+        except anki.AnkiError as exc:
+            return anki_error(request, file, exc)
+        with db() as conn:
+            choices = anki.default_choices(conn, deck)
+        return anki_page(request, file, deck, choices, deck.warnings)
+
+    @app.post("/import/anki/preview")
+    async def anki_repreview(request: Request, file: str = ""):
+        """Re-plan with your edits; with suggest=1, ask the AI for a study order first."""
+        form = await request.form()
+        try:
+            deck = read_deck(file)
+        except anki.AnkiError as exc:
+            return anki_error(request, file, exc)
+        parents = anki.parent_decks(deck)
+        with db() as conn:
+            defaults = anki.default_choices(conn, deck)
+        choices = choices_from_form(form, parents, defaults)
+        warnings = list(deck.warnings)
+        if form.get("suggest"):
+            if provider is None:
+                warnings.append("Suggesting an order needs AI, and none is set up.")
+            else:
+                for parent, choice in zip(parents, choices):
+                    if len(parent.subdecks) < 2:
+                        continue
+                    try:
+                        order = await run_in_threadpool(tutor.order_subdecks, provider, parent.name,
+                                                        [(s.label, s.prompts) for s in parent.subdecks])
+                    except LLMError as exc:
+                        warnings.append(f"{parent.name}: couldn't suggest an order ({exc})")
+                        continue
+                    choice.tiers = {label: i for i, label in enumerate(order, start=1)}
+                    choice.mode = "tiers"
+        return anki_page(request, file, deck, choices, warnings)
+
+    @app.post("/import/anki")
+    async def anki_import(request: Request, file: str = ""):
+        form = await request.form()
+        try:
+            deck = read_deck(file)
+        except anki.AnkiError as exc:
+            return anki_error(request, file, exc)
+        parents = anki.parent_decks(deck)
+        with db() as conn:
+            choices = choices_from_form(form, parents, anki.default_choices(conn, deck))
+            results, warnings = anki.apply_import(conn, deck, choices, max_image_bytes)
+        return anki_page(request, file, deck, choices, warnings, done=True, plans=results)
 
     return app
 

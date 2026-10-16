@@ -10,6 +10,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from . import media
 from .models import Analysis, Attempt, AttemptRecord, Card, CardIn, Collection, CollectionIn, Reference, describe_errors
 
 MIGRATIONS = Path(__file__).parent / "migrations"
@@ -29,10 +30,21 @@ def connect(path: str | Path) -> sqlite3.Connection:
 def migrate(conn: sqlite3.Connection) -> None:
     """Apply numbered migrations newer than PRAGMA user_version, each in its own transaction."""
     current = conn.execute("PRAGMA user_version").fetchone()[0]
-    for path in sorted(MIGRATIONS.glob("*.sql")):
-        version = int(path.name.split("_", 1)[0])
-        if version > current:
+    pending = [p for p in sorted(MIGRATIONS.glob("*.sql")) if int(p.name.split("_", 1)[0]) > current]
+    if not pending:
+        return
+    # Some migrations rebuild a table, which SQLite only allows with foreign keys off (its documented
+    # procedure). Turn them off around the migrations, then check nothing was left dangling.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        for path in pending:
+            version = int(path.name.split("_", 1)[0])
             conn.executescript(f"BEGIN;\n{path.read_text()}\nPRAGMA user_version = {version};\nCOMMIT;")
+        problems = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if problems:
+            raise RuntimeError(f"Database migration left broken references: {[tuple(r) for r in problems][:5]}")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 # --- collections ---
@@ -46,11 +58,12 @@ def _collection(row: sqlite3.Row) -> Collection:
         sql_dialect=row["sql_dialect"],
         max_unlocked_tier=row["max_unlocked_tier"],
         archived=bool(row["archived"]),
+        group=row["group_name"],
     )
 
 
 def list_collections(conn: sqlite3.Connection, include_archived: bool = False) -> list[Collection]:
-    sql = "SELECT * FROM collection" + ("" if include_archived else " WHERE archived = 0") + " ORDER BY name"
+    sql = "SELECT * FROM collection" + ("" if include_archived else " WHERE archived = 0") + " ORDER BY group_name, name"
     return [_collection(r) for r in conn.execute(sql)]
 
 
@@ -59,8 +72,8 @@ def get_collection(conn: sqlite3.Connection, collection_id: int) -> Collection |
     return _collection(row) if row else None
 
 
-def find_collection(conn: sqlite3.Connection, name: str) -> Collection | None:
-    row = conn.execute("SELECT * FROM collection WHERE name = ?", (name,)).fetchone()
+def find_collection(conn: sqlite3.Connection, name: str, group: str = "") -> Collection | None:
+    row = conn.execute("SELECT * FROM collection WHERE name = ? AND group_name = ?", (name, group)).fetchone()
     return _collection(row) if row else None
 
 
@@ -70,21 +83,27 @@ def save_collection(
     sql_dialect: str,
     tier_labels: dict[int, str],
     collection_id: int | None = None,
+    group: str = "",
 ) -> int:
-    """Create or update a collection. Raises sqlite3.IntegrityError if the name is taken."""
+    """Create or update a collection. Raises sqlite3.IntegrityError if the name is taken in that group."""
     labels = json.dumps({str(k): v for k, v in sorted(tier_labels.items())})
+    group = group.strip()
     with conn:
         if collection_id is None:
             cur = conn.execute(
-                "INSERT INTO collection (name, sql_dialect, tier_labels_json, created_at) VALUES (?, ?, ?, ?)",
-                (name, sql_dialect, labels, now()),
+                "INSERT INTO collection (group_name, name, sql_dialect, tier_labels_json, created_at) VALUES (?, ?, ?, ?, ?)",
+                (group, name, sql_dialect, labels, now()),
             )
             return cur.lastrowid
         conn.execute(
-            "UPDATE collection SET name = ?, sql_dialect = ?, tier_labels_json = ? WHERE id = ?",
-            (name, sql_dialect, labels, collection_id),
+            "UPDATE collection SET group_name = ?, name = ?, sql_dialect = ?, tier_labels_json = ? WHERE id = ?",
+            (group, name, sql_dialect, labels, collection_id),
         )
         return collection_id
+
+
+def list_groups(conn: sqlite3.Connection) -> list[str]:
+    return [r[0] for r in conn.execute("SELECT DISTINCT group_name FROM collection WHERE group_name != '' ORDER BY 1")]
 
 
 def set_collection_archived(conn: sqlite3.Connection, collection_id: int, archived: bool) -> None:
@@ -119,6 +138,7 @@ def _card(row: sqlite3.Row) -> Card:
         progress_reset_at=row["progress_reset_at"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        source_ref=row["source_ref"],
     )
 
 
@@ -174,6 +194,23 @@ def save_card(conn: sqlite3.Connection, collection_id: int, card: CardIn, card_i
         marks = ", ".join("?" for _ in columns)
         cur = conn.execute(f"INSERT INTO card ({names}) VALUES ({marks})", tuple(columns.values()))
         return cur.lastrowid, True
+
+
+def find_card_by_source(conn: sqlite3.Connection, source_ref: str) -> Card | None:
+    row = conn.execute("SELECT * FROM card WHERE source_ref = ? ORDER BY id LIMIT 1", (source_ref,)).fetchone()
+    return _card(row) if row else None
+
+
+def set_card_source(conn: sqlite3.Connection, card_id: int, source_ref: str) -> None:
+    with conn:
+        conn.execute("UPDATE card SET source_ref = ? WHERE id = ?", (source_ref, card_id))
+
+
+def move_card(conn: sqlite3.Connection, card_id: int, collection_id: int, tier: int) -> None:
+    """Move a card to another collection/tier. Its content is unchanged, so `updated_at` (and with it
+    the card's concept analysis) stays as is."""
+    with conn:
+        conn.execute("UPDATE card SET collection_id = ?, tier = ? WHERE id = ?", (collection_id, tier, card_id))
 
 
 def set_card_archived(conn: sqlite3.Connection, card_id: int, archived: bool) -> None:
@@ -283,8 +320,10 @@ def add_attempt(
 def export_collection(conn: sqlite3.Connection, collection_id: int) -> dict:
     collection = get_collection(conn, collection_id)
     cards = list_cards(conn, collection_id, include_archived=True)
+    images = media.images_for(conn, *(t for c in cards for t in (c.prompt, c.reference_answer)))
     return {
         "collection": collection.name,
+        **({"group": collection.group} if collection.group else {}),
         "sql_dialect": collection.sql_dialect,
         "tier_labels": {str(k): v for k, v in sorted(collection.tier_labels.items())},
         "cards": [
@@ -301,6 +340,7 @@ def export_collection(conn: sqlite3.Connection, collection_id: int) -> dict:
             }
             for c in cards
         ],
+        **({"media": {img.sha256: media.to_export(img) for img in images}} if images else {}),
     }
 
 
@@ -317,15 +357,22 @@ class ImportResult:
 def import_collection(conn: sqlite3.Connection, data: object) -> ImportResult:
     """Validate the whole file first; only write if there are no errors.
 
-    The collection is matched by name (created if new). Cards are matched by `id` when present.
+    The collection is matched by group and name (created if new). Cards are matched by `id` when
+    present. Embedded images are checked against their fingerprints before anything is written.
     """
     try:
         parsed = CollectionIn.model_validate(data)
     except ValidationError as exc:
         return ImportResult(errors=describe_errors(exc))
 
-    existing = find_collection(conn, parsed.collection)
+    existing = find_collection(conn, parsed.collection, parsed.group)
     errors = []
+    images: dict[str, bytes] = {}
+    for sha, item in parsed.media.items():
+        try:
+            images[sha] = media.decode_export(sha, item.model_dump())
+        except media.MediaError as exc:
+            errors.append(str(exc))
     seen_ids: set[int] = set()
     for i, card in enumerate(parsed.cards, start=1):
         if card.id is None:
@@ -340,12 +387,16 @@ def import_collection(conn: sqlite3.Connection, data: object) -> ImportResult:
         return ImportResult(errors=errors)
 
     result = ImportResult(collection_name=parsed.collection)
+    for sha, data in images.items():
+        item = parsed.media[sha]
+        media.save_image(conn, data, item.filename, item.alt, max_bytes=len(data))
     result.collection_id = save_collection(
         conn,
         parsed.collection,
         parsed.sql_dialect,
         parsed.tier_labels,
         collection_id=existing.id if existing else None,
+        group=parsed.group,
     )
     for card in parsed.cards:
         exists = card.id is not None and get_card(conn, card.id) is not None

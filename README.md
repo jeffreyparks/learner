@@ -35,6 +35,24 @@ When the app starts, it prints whether AI is on. Without a key, everything still
 
 If I want to try the whole flow without a key, I set `provider = "fake"` under `[llm]` in `learner.toml`, and it gives canned answers instead.
 
+## Images and groups
+
+Cards can have images (JPEG, PNG, GIF or WebP) in the question or the answer. In the card form I just paste one, drag it in, or click **Add image**. It asks for a short description, which the AI grader and screen readers use, and the AI grader sees the images too. They're stored inside `learner.db`, so backing up is still one file.
+
+Collections can sit in a **group**, like a "Data science" group holding Experiments, Forecasting, MMM and Probability. I set the group in the collection form (or when making a new collection from the card form), and the dashboard shows each group as a heading.
+
+## Importing from Anki
+
+I export a deck from Anki (`.apkg`) and either drop it in the `imports/` folder or upload it on the **Import** page. It shows me a preview first: which collections it'll create and a couple of sample cards from each. Then I click Import.
+
+By default each deck becomes one collection and its subdecks become tiers (`SQL::General Concepts` → tier 1, `SQL::Functions and Operators` → tier 2, and so on). The preview lets me set each subdeck's tier, and **Suggest tier order with AI** puts them in a sensible foundations-first order for me. If I'd rather have each subdeck as its own collection, I can pick that per deck instead. Everything starts fresh as new cards; Anki's review history doesn't come over. Basic, reversed and cloze cards all work, images included. If I import an updated version of the same deck later, it updates the cards instead of duplicating them, and keeps anything I changed here (tier, answer format, key points).
+
+## Tiers, and combining collections
+
+Each collection's **Edit** page has a **Tiers** panel: I can rename tiers, move them up or down, move all of a tier's cards into another tier, add an empty tier, or delete one (its cards get archived, not lost). Tier numbers and names always stay in step with the cards. To move individual cards, I filter **Cards** to one collection, tick the ones I want, and use **Move selected to**. The card form's Tier is a dropdown of the real tiers.
+
+**Combine collections** on the dashboard lets me fold several collections into one, each becoming a tier, the same way subdecks do on import. For example, Causal Inference, Causal Inference Fundamentals, Causal Inference DAGs, Causal Inference Potential Outcomes and Experiments become one Causal Inference collection: tier 1 basics, tier 2 fundamentals, and so on. I can set the tiers myself or ask the AI for an order. Picking a single collection gets me an AI-suggested order for its tiers. Progress and history come along, and anything left empty is archived, not deleted.
+
 ## Card order
 
 New cards get introduced so that a card teaching a concept comes before the cards that depend on it.

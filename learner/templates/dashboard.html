@@ -2,9 +2,14 @@
 {% block content %}
 <div class="page-head">
   <h1>Collections</h1>
-  <a class="button primary" href="/collections/new">+ New collection</a>
+  <span class="actions-inline">
+    <a class="button secondary" href="/collections/organize">Combine collections</a>
+    <a class="button primary" href="/collections/new">+ New collection</a>
+  </span>
 </div>
 
+{% for group, items in groups %}
+{% if group %}<h2 class="group-heading">{{ group }}</h2>{% endif %}
 {% for snap, current in items %}
 <section class="card-panel collection">
   <header>
@@ -23,7 +28,8 @@
   <div class="tier {% if t.tier == current %}current{% endif %} {% if not t.unlocked %}locked{% endif %}">
     <div class="tier-name">
       {{ snap.collection.tier_label(t.tier) }}
-      {% if t.complete %}<span class="badge known">complete</span>
+      {% if not t.total %}<span class="badge">empty</span>
+      {% elif t.complete %}<span class="badge known">complete</span>
       {% elif not t.unlocked %}<span class="badge locked">locked</span>
       {% elif t.tier == current %}<span class="badge current">current</span>{% endif %}
     </div>
@@ -31,10 +37,12 @@
       <div class="bar" title="{{ (t.pct_known * 100)|round|int }}% known"><span style="width: {{ (t.pct_known * 100)|round|int }}%"></span></div>
       <div class="counts">{{ t.known }} known · {{ t.learning }} learning · {{ t.new }} new</div>
     </div>
-    <a class="button {% if t.tier == current %}primary{% endif %}" href="/study/{{ snap.collection.id }}/{{ t.tier }}">Study</a>
+    {% if t.total %}<a class="button {% if t.tier == current %}primary{% endif %}" href="/study/{{ snap.collection.id }}/{{ t.tier }}">Study</a>
+    {% else %}<a class="button secondary" href="/cards/new?collection_id={{ snap.collection.id }}&amp;tier={{ t.tier }}">Add card</a>{% endif %}
   </div>
   {% endfor %}
 </section>
+{% endfor %}
 {% else %}
 <p class="muted">No collections yet. <a href="/collections/new">Create one</a> or <a href="/import">import a file</a>.</p>
 {% endfor %}
@@ -44,7 +52,7 @@
 {% if archived %}
 <details class="archived-list">
   <summary>Archived collections ({{ archived|length }})</summary>
-  <ul>{% for c in archived %}<li><a href="/collections/{{ c.id }}">{{ c.name }}</a></li>{% endfor %}</ul>
+  <ul>{% for c in archived %}<li><a href="/collections/{{ c.id }}">{{ c.display_name }}</a></li>{% endfor %}</ul>
 </details>
 {% endif %}
 {% endblock %}

@@ -152,22 +152,95 @@ function initStudy(study) {
   });
 }
 
+// Images in a card's Markdown (DESIGN.md §12.1): paste, drop, or "Add image" on any textarea marked
+// data-images. The image is stored on the server and its Markdown inserted at the cursor; thumbnails
+// below the box show which images the text uses.
+function initImageTools(textarea) {
+  const tools = document.createElement("div");
+  tools.className = "image-tools";
+  const button = Object.assign(document.createElement("button"), { type: "button", textContent: "Add image" });
+  const picker = Object.assign(document.createElement("input"), { type: "file", accept: "image/jpeg,image/png,image/gif,image/webp", hidden: true });
+  const status = Object.assign(document.createElement("span"), { className: "muted small" });
+  const thumbs = Object.assign(document.createElement("div"), { className: "thumbs" });
+  tools.append(button, picker, status, thumbs);
+  textarea.after(tools);
+
+  function showThumbs() {
+    const urls = [...new Set(textarea.value.match(/\/media\/[0-9a-f]{64}/g) || [])];
+    thumbs.replaceChildren(...urls.map((src) => Object.assign(document.createElement("img"), { src, alt: "" })));
+  }
+
+  async function upload(file) {
+    const name = (file.name || "image").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ");
+    const alt = window.prompt("Describe the image in a few words (the AI grader and screen readers use this):", name === "image" ? "" : name);
+    if (alt === null) return; // cancelled
+    const data = new FormData();
+    data.append("file", file);
+    data.append("alt", alt);
+    status.textContent = "Adding image…";
+    const reply = await fetch("/media", { method: "POST", body: data }).then((r) => r.json()).catch(() => ({ error: "Couldn't reach the server." }));
+    status.textContent = "";
+    if (reply.error) {
+      status.textContent = reply.error;
+      return;
+    }
+    const at = textarea.selectionStart ?? textarea.value.length;
+    const before = textarea.value.slice(0, at), after = textarea.value.slice(at);
+    const insert = (before && !before.endsWith("\n") ? "\n\n" : "") + reply.markdown + "\n";
+    textarea.value = before + insert + after;
+    textarea.selectionStart = textarea.selectionEnd = at + insert.length;
+    textarea.focus();
+    showThumbs();
+  }
+
+  const images = (list) => [...(list || [])].filter((f) => f.type.startsWith("image/"));
+  button.addEventListener("click", () => picker.click());
+  picker.addEventListener("change", () => { images(picker.files).forEach(upload); picker.value = ""; });
+  textarea.addEventListener("paste", (e) => {
+    const files = images(e.clipboardData?.files);
+    if (files.length) { e.preventDefault(); files.forEach(upload); }
+  });
+  textarea.addEventListener("dragover", (e) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); });
+  textarea.addEventListener("drop", (e) => {
+    const files = images(e.dataTransfer?.files);
+    if (files.length) { e.preventDefault(); files.forEach(upload); }
+  });
+  textarea.addEventListener("input", showThumbs);
+  showThumbs();
+  return tools;
+}
+
 // Card form: the reference answer becomes a code editor whenever the format is a code format,
-// using the selected collection's SQL dialect.
+// using the selected collection's SQL dialect. Image tools are offered on text, not code.
 function initCardForm(form) {
   const textarea = document.getElementById("reference-answer");
   const formatSelect = form.elements.answer_format;
   const collectionSelect = form.elements.collection_id;
   let editor = null;
 
+  const imageTools = new Map([...form.querySelectorAll("textarea[data-images]")].map((t) => [t, initImageTools(t)]));
+
   function refresh() {
     editor?.destroy();
     editor = null;
     const format = formatSelect.value;
+    imageTools.get(textarea).hidden = format !== "text";
     if (format === "text") return;
     const dialect = collectionSelect.selectedOptions[0]?.dataset.dialect;
     editor = mountEditor(textarea, { format, dialect });
   }
+
+  // The Tier dropdown lists the chosen collection's real tiers, plus "+ New tier at the end".
+  const tierSelect = document.getElementById("tier-select");
+  const tierChoices = JSON.parse(document.getElementById("tier-choices")?.textContent || "{}");
+  function refreshTiers() {
+    const current = tierSelect.value;
+    const options = (tierChoices[collectionSelect.value] || []).map(([value, label]) => new Option(label, value));
+    options.push(new Option("+ New tier at the end", tierSelect.dataset.new));
+    tierSelect.replaceChildren(...options);
+    tierSelect.value = [...tierSelect.options].some((o) => o.value === current) ? current : tierSelect.options[0].value;
+  }
+  collectionSelect.addEventListener("change", refreshTiers);
 
   const newCollectionField = document.getElementById("new-collection-field");
   collectionSelect.addEventListener("change", () => {

@@ -29,6 +29,11 @@ class Collection:
     sql_dialect: str
     max_unlocked_tier: int
     archived: bool
+    group: str = ""  # optional group label, e.g. "Data science" (DESIGN.md §12.2)
+
+    @property
+    def display_name(self) -> str:
+        return f"{self.group} › {self.name}" if self.group else self.name
 
     def tier_label(self, tier: int) -> str:
         label = self.tier_labels.get(tier)
@@ -50,6 +55,7 @@ class Card:
     progress_reset_at: str | None
     created_at: str
     updated_at: str
+    source_ref: str | None = None  # where an imported card came from, e.g. "anki:<guid>:<template>"
 
 
 @dataclass(frozen=True)
@@ -128,13 +134,24 @@ class CardIn(BaseModel):
         return data
 
 
+class MediaIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mime: str
+    data: str  # base64
+    filename: str = ""
+    alt: str = ""
+
+
 class CollectionIn(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     collection: str = Field(min_length=1)
+    group: str = ""
     sql_dialect: Literal[SQL_DIALECTS] = "mysql"
     tier_labels: dict[int, str] = {}
     cards: list[CardIn] = []
+    media: dict[str, MediaIn] = {}  # sha256 → image, for images the cards reference
 
 
 def describe_errors(exc: ValidationError) -> list[str]:

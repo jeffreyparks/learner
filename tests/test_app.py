@@ -1,3 +1,4 @@
+import json
 import re
 
 import pytest
@@ -301,3 +302,76 @@ def test_env_file_fills_in_missing_variables_only(tmp_path, monkeypatch):
     import os
     assert os.environ["LEARNER_TEST_A"] == "from-file" and os.environ["LEARNER_TEST_B"] == "already-set"
     monkeypatch.delenv("LEARNER_TEST_A")
+
+
+# --- images and groups (Phase 5) ---
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"fake image body"
+
+
+def upload(client, data=PNG, alt="A bar chart"):
+    return client.post("/media", files={"file": ("chart.png", data, "image/png")}, data={"alt": alt})
+
+
+def test_upload_and_serve_an_image(client):
+    reply = upload(client).json()
+    assert reply["markdown"] == f"![A bar chart]({reply['url']})"
+    served = client.get(reply["url"])
+    assert served.content == PNG and served.headers["content-type"] == "image/png"
+    assert "immutable" in served.headers["cache-control"] and served.headers["x-content-type-options"] == "nosniff"
+    assert upload(client, b"<svg onload=alert(1)>").status_code == 400
+    assert client.get("/media/" + "0" * 64).status_code == 404
+
+
+def test_grader_and_hints_see_the_cards_images(tmp_path):
+    provider = FakeProvider()
+    client = make_client(tmp_path, provider)
+    image = upload(client).json()
+    form = {"collection_id": "1", "tier": "1", "answer_format": "text",
+            "prompt": f"What kind of chart is this?\n\n{image['markdown']}", "reference_answer": "A bar chart"}
+    card_id = int(client.post("/cards/new", data=form, follow_redirects=False).headers["location"].split("/")[2].split("?")[0])
+    client.post("/grade", json={"card_id": card_id, "answer": "bar chart"})
+    client.post("/hint", json={"card_id": card_id, "answer": ""})
+    assert provider.images == [[("image/png", PNG)], [("image/png", PNG)]]
+
+
+def test_claude_receives_images_before_the_text():
+    from learner.llm import user_content
+    blocks = user_content("Grade this", [("image/png", PNG)])
+    assert blocks[0]["type"] == "image" and blocks[0]["source"]["media_type"] == "image/png"
+    assert blocks[-1] == {"type": "text", "text": "Grade this"}
+    assert user_content("Just text", []) == "Just text"
+
+
+def test_export_import_carries_images_and_group(client, tmp_path):
+    image = upload(client).json()
+    client.post("/collections/new", data={"name": "Forecasting", "group": "Data science", "sql_dialect": "mysql"})
+    cid = store.find_collection(store.connect(tmp_path / "app.db"), "Forecasting", "Data science").id
+    client.post("/cards/new", data={"collection_id": str(cid), "tier": "1", "answer_format": "text",
+                                    "prompt": f"Read the chart\n\n{image['markdown']}", "reference_answer": "Trend up"})
+    exported = client.get(f"/collections/{cid}/export").json()
+    assert exported["group"] == "Data science" and image["sha256"] in exported["media"]
+
+    (tmp_path / "other").mkdir()
+    fresh = make_client(tmp_path / "other")  # an empty database elsewhere
+    result = fresh.post("/import", data={"text": json.dumps(exported)}).text
+    assert "1 added" in result
+    assert fresh.get(image["url"]).content == PNG
+    exported["media"][image["sha256"]]["data"] = "aGVsbG8="  # tampered image data
+    assert "match its fingerprint" in fresh.post("/import", data={"text": json.dumps(exported)}).text
+
+
+def test_dashboard_groups_collections(client):
+    client.post("/collections/new", data={"name": "Experiments", "group": "Data science", "sql_dialect": "mysql"})
+    client.post("/collections/new", data={"name": "MMM", "group": "Data science", "sql_dialect": "mysql"})
+    page = client.get("/").text
+    assert page.count('class="group-heading"') == 1
+    assert page.index("Data science</h2>") < page.index("Experiments") < page.index("MMM")
+    assert page.index("Python") < page.index("Data science</h2>")  # ungrouped first
+
+
+def test_new_collection_in_a_group_from_the_card_form(client):
+    form = {"collection_id": "new", "new_collection": "Probability", "new_collection_group": "Data science",
+            "tier": "1", "answer_format": "text", "prompt": "What is a prior?", "reference_answer": "Belief before data."}
+    assert "Saved." in client.post("/cards/new", data=form).text
+    assert "Data science › Probability" in client.get("/browse").text

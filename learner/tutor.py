@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 from string import Template
 
 from . import checkers
-from .llm import LLMError, LLMProvider
+from .llm import ImageInput, LLMError, LLMProvider
 from .models import ANSWER_FORMATS, Analysis, Card, CardIn, Collection
 from .sequencer import concept_list
 
@@ -92,7 +92,7 @@ def _format_label(card: Card, dialect: str) -> str:
     return {"text": "free text", "sql": f"SQL ({dialect} dialect)"}.get(card.answer_format, card.answer_format)
 
 
-def grade(provider: LLMProvider, card: Card, answer: str, dialect: str) -> Grade:
+def grade(provider: LLMProvider, card: Card, answer: str, dialect: str, images: Sequence[ImageInput] = ()) -> Grade:
     diagnostics = checkers.check(card.answer_format, answer, dialect)
     if card.answer_format == "text":
         syntax = "Not applicable (free-text answer)."
@@ -109,7 +109,7 @@ def grade(provider: LLMProvider, card: Card, answer: str, dialect: str) -> Grade
         answer=answer,
         diagnostics=syntax,
     )
-    data = provider.complete("grade", system, user, GRADE_SCHEMA)
+    data = provider.complete("grade", system, user, GRADE_SCHEMA, images)
     if data.get("verdict") not in VERDICTS or not isinstance(data.get("feedback"), str):
         raise LLMError("The grader's reply was incomplete.")
     return Grade(
@@ -121,7 +121,10 @@ def grade(provider: LLMProvider, card: Card, answer: str, dialect: str) -> Grade
     )
 
 
-def hint(provider: LLMProvider, card: Card, answer: str, level: int, earlier: list[str], dialect: str) -> str:
+def hint(
+    provider: LLMProvider, card: Card, answer: str, level: int, earlier: list[str], dialect: str,
+    images: Sequence[ImageInput] = (),
+) -> str:
     level = max(1, min(level, MAX_HINT_LEVEL))
     system, user = render(
         "hint",
@@ -132,7 +135,7 @@ def hint(provider: LLMProvider, card: Card, answer: str, level: int, earlier: li
         earlier_hints="\n".join(f"{i}. {h}" for i, h in enumerate(earlier, start=1)) or "(none)",
         level=level,
     )
-    data = provider.complete("hint", system, user, HINT_SCHEMA)
+    data = provider.complete("hint", system, user, HINT_SCHEMA, images)
     text = data.get("hint")
     if not isinstance(text, str) or not text.strip():
         raise LLMError("The tutor's hint came back empty.")
@@ -310,3 +313,27 @@ def draft_cards(
     if not drafts:
         raise LLMError("The AI didn't produce any usable cards. Try adding more detail to your notes.")
     return drafts
+
+
+DECK_ORDER_SCHEMA = {
+    "type": "object",
+    "properties": {"order": {"type": "array", "items": {"type": "string"}}},
+    "required": ["order"],
+    "additionalProperties": False,
+}
+
+
+def order_subdecks(provider: LLMProvider, deck_name: str, subdecks: Sequence[tuple[str, Sequence[str]]]) -> list[str]:
+    """Suggest a foundations-first study order for a deck's subdecks: (name, example prompts) pairs.
+    Names the model leaves out keep their place at the end; unknown names are ignored."""
+    blocks = "\n\n".join(
+        f'<subdeck name="{escape(name)}">\n' + "\n".join(f"- {p}" for p in prompts) + "\n</subdeck>"
+        for name, prompts in subdecks
+    )
+    system, user = render("deck_order", deck=escape(deck_name), subdecks=blocks)
+    data = provider.complete("sequence", system, user, DECK_ORDER_SCHEMA)
+    names = [name for name, _ in subdecks]
+    order = [n for n in dict.fromkeys(unescape(str(n)) for n in data.get("order") or []) if n in names]
+    if not order:
+        raise LLMError("The AI didn't suggest an order.")
+    return order + [n for n in names if n not in order]

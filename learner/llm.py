@@ -6,11 +6,12 @@ blocks on the LLM.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -26,12 +27,27 @@ class LLMError(Exception):
     """The LLM couldn't produce a usable answer. The message is shown to the user."""
 
 
+# An image to show the model: (mime type, bytes).
+ImageInput = tuple[str, bytes]
+
+
 class LLMProvider(Protocol):
     name: str
 
-    def complete(self, task: str, system: str, user: str, schema: dict) -> dict:
-        """Return a dict matching the JSON `schema`, or raise LLMError."""
+    def complete(self, task: str, system: str, user: str, schema: dict, images: Sequence[ImageInput] = ()) -> dict:
+        """Return a dict matching the JSON `schema`, or raise LLMError. `images` go before the text."""
         ...
+
+
+def user_content(user: str, images: Sequence[ImageInput]) -> str | list[dict]:
+    """The user turn: plain text, or the images (in order) followed by the text."""
+    if not images:
+        return user
+    blocks = [
+        {"type": "image", "source": {"type": "base64", "media_type": mime, "data": base64.b64encode(data).decode("ascii")}}
+        for mime, data in images
+    ]
+    return blocks + [{"type": "text", "text": user}]
 
 
 class ClaudeProvider:
@@ -50,13 +66,13 @@ class ClaudeProvider:
         # One retry: a slow answer is worse than falling back to marking yourself.
         self.client = client or anthropic.Anthropic(timeout=cfg.timeout, max_retries=1)
 
-    def complete(self, task: str, system: str, user: str, schema: dict) -> dict:
+    def complete(self, task: str, system: str, user: str, schema: dict, images: Sequence[ImageInput] = ()) -> dict:
         try:
             response = self._authoring(task, system, user, schema) if task in AUTHORING_TASKS else self.client.messages.create(
                 model=self.models[task],
                 max_tokens=8000,
                 system=system,
-                messages=[{"role": "user", "content": user}],
+                messages=[{"role": "user", "content": user_content(user, images)}],
                 output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": schema}},
             )
         except anthropic.AuthenticationError as exc:
@@ -112,9 +128,11 @@ class FakeProvider:
         self.fail = fail
         self.delay = delay
         self.calls: list[tuple[str, str]] = []
+        self.images: list[list[ImageInput]] = []  # the images each call received
 
-    def complete(self, task: str, system: str, user: str, schema: dict) -> dict:
+    def complete(self, task: str, system: str, user: str, schema: dict, images: Sequence[ImageInput] = ()) -> dict:
         self.calls.append((task, user))
+        self.images.append(list(images))
         if self.delay:
             time.sleep(self.delay)
         if self.fail:
@@ -127,6 +145,9 @@ class FakeProvider:
         if task == "hint":
             level = _tag(user, "hint_level") or "1"
             return {"hint": f"(Fake hint, level {level}) Re-read the prompt and think about the key idea it's testing."}
+        if task == "sequence" and "<subdecks>" in user:  # ordering an Anki deck's subdecks
+            names = re.findall(r'<subdeck name="([^"]*)"', user)
+            return {"order": list(reversed(names))}
         if task == "sequence":
             return self._sequence(user)
         if task == "draft":

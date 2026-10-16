@@ -2,7 +2,7 @@
 
 A single-user, self-hosted study app inspired by Anki, built for **fast technical review**. It handles free-text answers **and** code answers (Python, SQL, …), and uses an LLM to sequence material, give hints, and grade responses.
 
-> Status: Phases 0–4 built (adaptive prerequisite refresh is still on the To-Do list). The reasoning behind each decision is in [DECISIONS.md](DECISIONS.md); later ideas are in §13.
+> Status: Phases 0–5 built (images, collection groups, Anki import). Adaptive prerequisite refresh and AI-suggested key points for imported cards are on the To-Do list. Adaptive prerequisite refresh is still on the To-Do list. The reasoning behind each decision is in [DECISIONS.md](DECISIONS.md); later ideas are in §14.
 
 ---
 
@@ -14,7 +14,9 @@ A single-user, self-hosted study app inspired by Anki, built for **fast technica
 - Content is easy to create and edit, in the app or by bulk JSON import.
 - Two answer modes: **free text** and **code** (syntax highlighting + syntax checking, feels like an editor).
 - One study flow for every card: write an answer, submit, and the LLM grades it (or you mark yourself when no LLM is configured).
-- Organize by **Collection → Tier → Card**, with each card linking out to the right documentation.
+- Organize by **Collection → Tier → Card**, with each card linking out to the right documentation. Collections can be grouped (e.g. a "Data science" group holding Experiments, Forecasting, MMM, Probability).
+- Cards can include **images** (diagrams, charts, schemas) in the prompt and the answer.
+- **Import Anki decks** (`.apkg`), so existing material isn't stranded.
 - Cards don't need a hand-maintained order. The LLM works out the learning sequence.
 - Built for **fast review sessions**. Progress is measured by correct answers across sessions, not calendar days.
 - **Every LLM feature is optional.** Without an API key the app is still a working flashcard tool.
@@ -22,7 +24,7 @@ A single-user, self-hosted study app inspired by Anki, built for **fast technica
 **Non-Goals (for now)**
 - Multi-user, accounts, auth, sync, cloud hosting.
 - Mobile app.
-- **Running code.** Code answers are checked for syntax only (see §8 and §13).
+- **Running code.** Code answers are checked for syntax only (see §8 and §14).
 - Multi-part cards. There's one prompt per card.
 
 ---
@@ -72,7 +74,7 @@ Collection        e.g. "Python", "SQL", "Machine Learning"
 
 **References** appear on the answer side of the card, alongside the reference answer and the verdict. They open in a new tab. You edit them like any other field, in the card form or in JSON.
 
-**Storage: everything in one SQLite file** (`learner.db`).
+**Storage: everything in one SQLite file** (`learner.db`), images included (§12.1).
 - Cards are created and edited in the app's editor, or **bulk-imported from JSON** (§11).
 - Backup means copying one file, or exporting to JSON.
 - **Editing a card keeps its progress.** If you change a card enough that the old progress no longer applies, use "Reset progress."
@@ -222,7 +224,7 @@ Each answer format is one entry in a small registry. Adding a language means add
 - Diagnostics run on the server (`POST /check`), triggered about 500 ms after you stop typing, and show as squiggles plus a gutter marker.
 - The same editor is used for the answer box on code cards (both modes) and for the reference answer in the card form. Revealed reference answers are syntax-highlighted.
 - They're passed to the grader as evidence. They never decide the outcome on their own.
-- **No code execution** (see §13).
+- **No code execution** (see §14).
 
 ---
 
@@ -345,7 +347,64 @@ There is no progress table. Status, streak, and last-seen time are calculated fr
 
 ---
 
-## 12. Phased Plan
+## 12. Images, Anki Import & Organizing (Phase 5)
+
+### 12.1 Images on cards
+- **Where:** in a card's prompt and its reference answer, anywhere in the Markdown. JPEG, PNG, GIF and WebP. No video or audio. **No SVG** for now, since SVG files can carry scripts.
+- **Storage:** inside `learner.db`, in a `media` table: `media(id, sha256, mime, bytes, filename, alt, created_at)`. Backup is still one file, and the same image used twice is stored once (matched by fingerprint). Size limit 4 MB per image by default (`max_image_mb` in `learner.toml`), comfortably inside what the AI API accepts. The type is checked from the file's bytes, not its name.
+- **Referencing:** standard Markdown, `![ER diagram](/media/<sha256>)`, served by `GET /media/<sha256>` (local-only, like everything else).
+- **Adding:** in the card form, paste from the clipboard, drag a file in, or click an upload button. The app stores it and inserts the Markdown, prompting for a short description (alt text).
+- **The AI sees images:** the grader and hints receive the card's images, so "what does this plot show?" can be graded. Sequencing and drafting stay text-only (the alt text stands in).
+- **Your answers stay text-only.** Answering with an image is out of scope.
+- **Export/import:** JSON exports embed the images (base64) in a `media` map, so an export is still one self-contained file.
+- **Unused images** stay in the database (they're small); a cleanup command can come later if it ever matters.
+
+### 12.2 Collection groups
+- Collections get an optional **group** name (e.g. "Data science"). The dashboard shows each group as a heading over its collections; ungrouped collections come first. It's a label, not a nested hierarchy: one level is enough.
+- Collection names become unique **within a group** (so "Basics" can exist under both Python and SQL). Small migration: replace the unique-name rule with unique (group, name).
+- Set in the collection form, and in the card form's "+ New collection…" option.
+
+### 12.3 Anki import (`.apkg`)
+- **Where:** drop the file in `imports/` (git-ignored) or upload it on the Import page. The import shows a **preview** before anything is written.
+- **Subdecks → tiers (default) or collections, chosen per deck on the preview.**
+  - *Tiers* (default): each top-level deck becomes one collection and each subdeck a tier, labelled with the subdeck's name (`SQL::Joins` → "Tier 3 · Joins" in collection SQL). Cards directly in the parent deck go in a tier labelled "General". The preview shows a tier number per subdeck, initially Anki's (alphabetical) order; edit them freely, and give two subdecks the same number to share a tier. **"Suggest tier order with AI"** asks the AI (the sequencing model) to order the subdecks foundations-first from their names and a few example questions. It's a button, so the preview never waits on the AI.
+  - *Separate collections*: `Parent::Child` → collection "Child" in group "Parent" (`A::B::C` → "B › C").
+  - The collection name and group are editable. If a collection with the deck's name already holds other cards (like the starter SQL collection), the default name becomes "<name> (Anki)" so the two aren't mixed.
+  - The tiers chosen on the preview are applied on every import, so switching a deck from collections to tiers moves already-imported cards into place.
+- **Note types → cards:**
+  - *Basic*: Front → prompt, Back → reference answer.
+  - *Basic (and reversed)*: two cards, one each way.
+  - *Cloze*: one card per gap (`{{c1::…}}`), with that gap shown as `[…]` in the prompt and its text as the answer.
+  - *Anything else*: first field → prompt, the remaining fields → reference answer; the preview shows what each note type will become.
+- **Formatting:** Anki fields are HTML. They're converted to Markdown: `<img>` → stored images (§12.1), `<pre>`/`<code>` → code blocks, bold/italics/lists → Markdown, anything else → plain text. All imported cards are `text` format; change a card to Python or SQL afterwards if it's really a code card.
+- **Tags** come across as tags.
+- **Review history is not imported.** Everything starts fresh as `new`.
+- **Re-importing** an updated deck updates cards instead of duplicating them: each card stores its Anki note id and card template (new `card.source_ref` column).
+- **After import:** the result page links each collection's Card order page to rebuild the order (§6). An AI pass to suggest key points for imported cards is on the To-Do list (§14); grading works without them, against the reference answer.
+- **Implementation notes:** the database is opened in memory, read-only, with SQLite's untrusted-schema protection on; Anki's custom text-sort rule is registered so its tables can be read; a database saved in WAL mode is switched to rollback mode in memory first. Anki's settings (stored as protobuf) are read with a few lines of code rather than a dependency. Card templates are followed (`{{Field}}`, `{{#Field}}` sections, `{{cloze:…}}`, `{{type:…}}`), so custom note types mostly just work. Image Occlusion cards are skipped with a note.
+- **File formats:** the older Anki database format, and the newer compressed one (Anki 2.1.50+) where practical. If a deck won't read, re-export it from Anki with "Support older Anki versions" ticked. Using Anki's official Python package is the fallback if the newer format proves unreliable.
+- **Safety:** a deck may come from the internet. The importer rejects media names that try to escape the import (`../`), caps the total unpacked size, and never runs anything from the file.
+### 12.4 Combining and re-tiering collections
+- **"Combine collections"** (dashboard, and "Suggest tier order with AI" on a collection's edit page): pick one or more collections. Every tier of every chosen collection is a row; map each row to a tier of one target collection, with an editable tier label. Same controls as the Anki preview, including **"Suggest tier order with AI"** (same prompt and model).
+- **Target:** a new name, or one of the chosen collections (combine in place). A name belonging to an unrelated existing collection is refused, so nothing gets mixed in by accident. The suggested name is the words the chosen names share ("Causal Inference …" → "Causal Inference"), and that prefix is trimmed from the suggested labels ("Causal Inference Fundamentals" → "Fundamentals").
+- **Re-tiering one collection:** pick just that one; give rows the same number to merge tiers, or renumber to reorder them.
+- **What moves:** cards keep their ids, so progress, history and concept analyses come along. Content doesn't change, so no card becomes "unsequenced"; the order within each tier is recalculated from the existing analyses. Collections left empty are archived (never deleted).
+### 12.5 Managing tiers
+**The rule:** a collection's tiers are exactly 1…N, and `tier_labels` has one entry per tier (blank displays as "Tier n"). One module, `tiers.py`, makes every tier change, updating cards, labels and the sticky unlock in one transaction, then **tidying** (closing gaps, adding missing label entries). The tidy step also runs at startup and after every import or combine, so no path can leave labels out of step with cards. Free-text tier labels are gone: for a new collection you list tier names one per line, and after that the Tiers panel owns them.
+
+- **Tiers panel** (Edit collection): rename (inline), **↑ / ↓** (swap with the neighbour, cards and labels together), **Move its cards to…** (the tier stays, now empty; this covers merging), **Delete**, **+ Add tier** (empty, at the end).
+- **Delete archives the tier's cards** (history kept; the confirm says how many) and renumbers the tiers above it. Archived cards of a deleted tier are parked beyond the last tier; **unarchiving one puts it in the last tier**.
+- **Empty tiers are allowed.** They show as "empty" with an "Add card" button instead of Study, and **never block unlocking**: unlocking passes straight through them.
+- **Unlocks survive reorganising:** a tier that was unlocked stays unlocked wherever it moves; deleting an unlocked tier lowers the count by one.
+- **Card form:** Tier is a dropdown of the collection's real tiers plus "+ New tier at the end".
+- **Cards page:** filtered to one collection, tick cards and **Move selected to** a tier (or a new one).
+- **Combine collections** (§12.4) is for merging collections and AI-suggested tier orders; hand edits to one collection's tiers happen in the Tiers panel.
+- A study session in progress refers to its tier by number, so tier changes apply from the next session.
+- Drag and drop was considered and left out: tiers are few (buttons are one click), and moving many cards is faster with checkboxes than dragging.
+
+---
+
+## 13. Phased Plan
 
 | Phase | Scope | Usable result |
 |---|---|---|
@@ -354,18 +413,19 @@ There is no progress table. Status, streak, and last-seen time are calculated fr
 | **2. LLM tutor** | `LLMProvider` (Claude + Fake), prompt files, grading for every card, hint ladder, override, graceful fallback | AI grading and hints |
 | **3. Sequencing** | Batch concept analysis, graph ordering, readiness, out-of-date detection, sequence list + warnings, manual concept edits | Smart ordering of new cards |
 | **4. Polish** | Stats, grader test set (`learner-eval`), authoring assistant, new collection from the card form | Insight into progress and grading; faster authoring |
+| **5. Media & Anki** | Images on cards (§12.1), collection groups (§12.2), Anki `.apkg` import (§12.3), combining collections (§12.4), managing tiers (§12.5) | Visual cards; existing Anki decks come across; collections can be reshaped |
 
 Phase 0 is usable on its own, and each later phase adds to it.
 
 ---
 
-## 13. To-Do / Later
+## 14. To-Do / Later
 
 - [ ] **Code execution.** SQL: run user and reference queries against an author-provided schema + sample data in in-memory DuckDB/SQLite and compare result sets. Python: run author-provided asserts in a sandboxed subprocess with a timeout. Results would feed the grader as evidence.
 - [ ] **Optional day-based retention mode** (FSRS) for long-term spacing.
 - [ ] **Link checker:** a command that flags dead reference URLs.
+- [ ] **Suggest key points for imported cards:** an optional AI pass after an Anki import, so grading has concrete points to check.
 - [ ] **Adaptive refresh:** after a miss, pull that card's prerequisites forward into the session. Now possible with the concept graph; worth doing once real use shows misses clustering on prerequisites (the Stats page's weakest concepts will show it).
 - [ ] **Per-collection setting overrides**, if global settings ever prove too coarse.
 - [ ] **Additional LLM providers** (OpenAI, local via Ollama, …).
 - [ ] **Multi-part cards.**
-- [ ] **Anki import.**

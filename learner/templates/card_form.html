@@ -7,6 +7,7 @@
   {% if card %}<span>{{ status_badge("archived" if card.archived else progress.status) }}{% if progress and progress.attempts %} <span class="muted small">streak {{ progress.streak }} · {{ progress.attempts }} attempts</span>{% endif %}</span>{% endif %}
 </div>
 {% if request.query_params.get("saved") %}<p class="notice">Saved.</p>{% endif %}
+{% if request.query_params.get("moved_tier") %}<p class="notice">Unarchived. Its tier had been deleted, so it's now in the last tier.</p>{% endif %}
 {% if request.query_params.get("reset") %}<p class="notice">Progress reset. Earlier attempts are kept but no longer count.</p>{% endif %}
 {{ errors_list(errors) }}
 
@@ -15,21 +16,33 @@
     <label>Collection
       <select name="collection_id" required>
         <option value="">Choose…</option>
-        {% for c in collections %}<option value="{{ c.id }}" data-dialect="{{ c.sql_dialect }}" {% if form.collection_id == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        {% for c in collections %}<option value="{{ c.id }}" data-dialect="{{ c.sql_dialect }}" {% if form.collection_id == c.id|string %}selected{% endif %}>{{ c.display_name }}</option>{% endfor %}
         <option value="{{ NEW_COLLECTION }}" {% if form.collection_id == NEW_COLLECTION %}selected{% endif %}>+ New collection…</option>
       </select>
     </label>
-    <label id="new-collection-field" {% if form.collection_id != NEW_COLLECTION %}hidden{% endif %}>New collection name
-      <input type="text" name="new_collection" value="{{ form.new_collection or '' }}" placeholder="e.g. Machine Learning"></label>
-    <label>Tier <input type="number" name="tier" min="1" value="{{ form.tier }}" required></label>
+    <span id="new-collection-field" class="row" {% if form.collection_id != NEW_COLLECTION %}hidden{% endif %}>
+      <label>New collection name
+        <input type="text" name="new_collection" value="{{ form.new_collection or '' }}" placeholder="e.g. Forecasting"></label>
+      <label>Group <span class="hint">optional</span>
+        <input type="text" name="new_collection_group" value="{{ form.new_collection_group or '' }}" list="group-names" placeholder="e.g. Data science" autocomplete="off"></label>
+      <datalist id="group-names">{% for g in groups %}<option value="{{ g }}">{% endfor %}</datalist>
+    </span>
+    <label>Tier
+      <select name="tier" id="tier-select" data-current="{{ form.tier }}" data-new="{{ NEW_TIER }}">
+        {% set chosen = form.collection_id|int(0) %}
+        {% for t, label in tier_choices.get(chosen, []) %}<option value="{{ t }}" {% if form.tier == t|string %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        <option value="{{ NEW_TIER }}" {% if form.tier == NEW_TIER %}selected{% endif %}>+ New tier at the end</option>
+      </select>
+    </label>
+    <script type="application/json" id="tier-choices">{{ tier_choices|tojson }}</script>
     <label>Answer format
       <select name="answer_format">{% for f in ANSWER_FORMATS %}<option {% if form.answer_format == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select>
     </label>
   </div>
-  <label>Prompt <span class="hint">Markdown</span>
-    <textarea name="prompt" rows="5" required>{{ form.prompt }}</textarea></label>
+  <label>Prompt <span class="hint">Markdown. Paste or drop an image to add it</span>
+    <textarea name="prompt" rows="5" required data-images>{{ form.prompt }}</textarea></label>
   <label>Reference answer <span class="hint">Markdown for text cards; checked as you type for Python and SQL</span>
-    <textarea name="reference_answer" id="reference-answer" rows="6" class="code" required spellcheck="false">{{ form.reference_answer }}</textarea></label>
+    <textarea name="reference_answer" id="reference-answer" rows="6" class="code" required spellcheck="false" data-images>{{ form.reference_answer }}</textarea></label>
   <label>Key points <span class="hint">Optional. One per line; the AI grader checks answers against these</span>
     <textarea name="rubric" rows="3">{{ form.rubric }}</textarea></label>
   <label>References <span class="hint">Optional. One per line: Title | https://…</span>

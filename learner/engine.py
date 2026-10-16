@@ -96,21 +96,31 @@ def _pct_known(cards: Sequence[Card], progress: dict[int, Progress], tier: int) 
     return sum(progress[c.id].status == KNOWN for c in in_tier) / len(in_tier) if in_tier else 0.0
 
 
-def unlocked_through(cards: Sequence[Card], progress: dict[int, Progress], stored_max: int, unlock_pct: float) -> int:
-    """Highest unlocked tier. Never lower than `stored_max` (unlocks are sticky); the lowest tier is always open."""
-    tiers = sorted({c.tier for c in cards})
+def unlocked_through(
+    cards: Sequence[Card], progress: dict[int, Progress], stored_max: int, unlock_pct: float,
+    tiers: Sequence[int] | None = None,
+) -> int:
+    """Highest unlocked tier. Never lower than `stored_max` (unlocks are sticky); the lowest tier is always open.
+
+    `tiers` is the collection's full list of tiers (empty ones included); an empty tier never blocks
+    the tier after it (DESIGN.md §12.5).
+    """
+    tiers = sorted(set(tiers or ()) | {c.tier for c in cards})
     if not tiers:
         return stored_max
     highest = max(stored_max, tiers[0])
     for lower, upper in zip(tiers, tiers[1:]):
-        if lower <= highest < upper and _pct_known(cards, progress, lower) >= unlock_pct:
+        empty = not any(c.tier == lower for c in cards)
+        if lower <= highest < upper and (empty or _pct_known(cards, progress, lower) >= unlock_pct):
             highest = upper
     return highest
 
 
-def tier_summaries(cards: Sequence[Card], progress: dict[int, Progress], unlocked: int) -> list[TierSummary]:
+def tier_summaries(
+    cards: Sequence[Card], progress: dict[int, Progress], unlocked: int, tiers: Sequence[int] | None = None
+) -> list[TierSummary]:
     summaries = []
-    for tier in sorted({c.tier for c in cards}):
+    for tier in sorted(set(tiers or ()) | {c.tier for c in cards}):
         counts = Counter(progress[c.id].status for c in cards if c.tier == tier)
         summaries.append(
             TierSummary(
@@ -127,7 +137,7 @@ def tier_summaries(cards: Sequence[Card], progress: dict[int, Progress], unlocke
 
 def default_tier(summaries: Sequence[TierSummary]) -> int | None:
     """The tier a session starts on by default: the highest unlocked one."""
-    unlocked = [s.tier for s in summaries if s.unlocked]
+    unlocked = [s.tier for s in summaries if s.unlocked and s.total]
     return max(unlocked) if unlocked else None
 
 

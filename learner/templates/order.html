@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% from "_macros.html" import status_badge, ai_setup %}
-{% block title %}Card order · {{ snap.collection.name }}{% endblock %}
+{% block title %}Card order · {{ snap.collection.display_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Card order · {{ snap.collection.name }}</h1>
+  <h1>Card order · {{ snap.collection.display_name }}</h1>
   {% if ai_grading %}
   <form method="post" action="/collections/{{ snap.collection.id }}/order/rebuild" id="rebuild-form">
     <button type="submit" class="primary" id="rebuild-button">Rebuild order</button>

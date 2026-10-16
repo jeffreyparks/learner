@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list %}
+{% block title %}Anki import · Learner{% endblock %}
+{% block content %}
+<h1>{{ "Imported" if done else "Import" }} {{ file }}</h1>
+{{ errors_list(errors) }}
+
+{% if deck %}
+<p class="muted">
+  {{ deck.cards|length }} card{{ "" if deck.cards|length == 1 else "s" }} from {{ deck.format }}{% if deck.media %}, {{ deck.media|length }} media file{{ "" if deck.media|length == 1 else "s" }}{% endif %}.
+  {% if not done %}Nothing has been imported yet: choose how to organise it, then import.{% endif %}
+</p>
+{% if warnings %}<div class="notice warn-notice"><ul class="plain-list">{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+
+{% if not done %}
+<form method="post" action="/import/anki?file={{ file|urlencode }}" id="import-form">
+  {% for parent, choice, rows in parents %}
+  {% set i = loop.index0 %}
+  {% set has_subdecks = parent.subdecks|length > 1 or parent.subdecks[0].label != parent_itself %}
+  <section class="card-panel deck-choice">
+    <h2>{{ parent.name }} <span class="muted small">{{ parent.subdecks|sum(attribute="count") }} cards{% if has_subdecks %} in {{ parent.subdecks|length }} subdecks{% endif %}</span></h2>
+    {% if has_subdecks %}
+    <div class="mode-choice">
+      <label class="check"><input type="radio" name="mode_{{ i }}" value="tiers" {% if choice.mode == "tiers" %}checked{% endif %}>
+        Subdecks become <strong>tiers</strong> of one collection</label>
+      <label class="check"><input type="radio" name="mode_{{ i }}" value="collections" {% if choice.mode == "collections" %}checked{% endif %}>
+        Subdecks become <strong>separate collections</strong>, grouped under “{{ parent.name }}”</label>
+    </div>
+    {% else %}<input type="hidden" name="mode_{{ i }}" value="tiers">{% endif %}
+
+    <div class="tiers-part" {% if choice.mode == "collections" %}hidden{% endif %}>
+      <div class="row stacked-inline">
+        <label>Collection name <input type="text" name="collection_{{ i }}" value="{{ choice.collection }}"></label>
+        <label>Group <span class="hint">optional</span> <input type="text" name="group_{{ i }}" value="{{ choice.group }}"></label>
+      </div>
+      {% if has_subdecks %}
+      <table class="cards tier-table">
+        <thead><tr><th>Tier</th><th>Subdeck</th><th>Cards</th><th>For example</th></tr></thead>
+        <tbody>
+        {% for j, sub in rows %}
+          <tr>
+            <td><select name="tier_{{ i }}_{{ j }}" aria-label="Tier for {{ sub.label }}">
+              {% for t in tier_options %}<option value="{{ t }}" {% if choice.tiers[sub.label] == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+            </select></td>
+            <td>{{ sub.label }}</td>
+            <td>{{ sub.count }}</td>
+            <td class="muted small">{{ sub.prompts[0]|truncate(70) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <p class="muted small">Each subdeck's name becomes its tier's label. Give two subdecks the same number to put them in one tier.</p>
+      {% endif %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <div class="actions">
+    <button type="submit" class="primary" id="import-button">Import {{ deck.cards|length }} cards</button>
+    <button type="submit" formaction="/import/anki/preview?file={{ file|urlencode }}">Update preview</button>
+    {% if ai_grading %}<button type="submit" name="suggest" value="1" formaction="/import/anki/preview?file={{ file|urlencode }}" id="suggest-button">Suggest tier order with AI</button>{% endif %}
+    <a class="button secondary" href="/import">Cancel</a>
+  </div>
+</form>
+<h2>What the import will do</h2>
+{% else %}
+<p class="notice">Done. All cards start as new. Next: open each collection's <strong>Card order</strong> and rebuild it, so new cards come in a sensible order within each tier.</p>
+{% endif %}
+
+{% for p in plans %}
+<section class="card-panel">
+  <div class="page-head">
+    <h3>{{ p.display_name }} {% if not p.exists and not done %}<span class="badge">new collection</span>{% endif %}</h3>
+    {% if done %}<span class="links small"><a href="/browse?collection_id={{ p.collection_id }}">Cards</a> · <a href="/collections/{{ p.collection_id }}/order">Card order</a></span>{% endif %}
+  </div>
+  <p class="small">{{ p.new }} {{ "added" if done else "new" }} · {{ p.updated }} {{ "updated" if done else "to update" }} · {{ p.unchanged }} unchanged</p>
+  {% if p.tier_labels %}<p class="small muted">{% for t, label in p.tier_labels|dictsort %}Tier {{ t }} · {{ label }}{% if not loop.last %} &nbsp;|&nbsp; {% endif %}{% endfor %}</p>{% endif %}
+  {% if not done %}
+  {% for prompt, answer in p.samples %}
+  <details class="sample"><summary>{{ prompt|card_title(100) }}</summary>
+    <div class="markdown">{{ prompt|md }}</div><hr><div class="markdown">{{ answer|md }}</div></details>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endfor %}
+{% endif %}
+<p><a href="/import">Back to Import</a></p>
+<script type="module">
+  // Show the collection name and tier table only when "tiers" is chosen.
+  document.querySelectorAll(".deck-choice").forEach((section) => {
+    const part = section.querySelector(".tiers-part");
+    section.querySelectorAll('input[type=radio]').forEach((radio) =>
+      radio.addEventListener("change", () => { part.hidden = radio.value === "collections" && radio.checked; }));
+  });
+  const form = document.getElementById("import-form");
+  form?.addEventListener("submit", (e) => {
+    const b = e.submitter;
+    if (!b) return;
+    b.textContent = b.id === "suggest-button" ? "Asking the AI…" : b.id === "import-button" ? "Importing…" : "Updating…";
+    // Disable after the form data is collected: a disabled button's name/value (suggest=1) isn't sent.
+    setTimeout(() => form.querySelectorAll("button").forEach((x) => { x.disabled = true; }));
+  });
+</script>
+{% endblock %}

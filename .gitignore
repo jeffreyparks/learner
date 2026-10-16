@@ -6,3 +6,10 @@ learner.db
 learner.toml
 .env
 tools/codemirror/node_modules/
+
+# Files dropped in for importing (Anki decks etc.); only the folder note is tracked
+imports/*
+!imports/README.md
+
+# Database backups
+backups/

@@ -10,19 +10,74 @@
 {{ errors_list(errors) }}
 <form method="post" class="stacked">
   <label>Name <input type="text" name="name" value="{{ form.name or '' }}" required></label>
+  <label>Group <span class="hint">Optional. Collections in the same group are shown together, e.g. “Data science”</span>
+    <input type="text" name="group" value="{{ form.group or '' }}" list="group-names" autocomplete="off"></label>
+  <datalist id="group-names">{% for g in groups %}<option value="{{ g }}">{% endfor %}</datalist>
   <label>SQL dialect <span class="hint">Used to check SQL answers</span>
     <select name="sql_dialect">{% for d in SQL_DIALECTS %}<option {% if form.sql_dialect == d %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
-  <label>Tier labels <span class="hint">Optional. One per line, like “1: Foundations”</span>
-    <textarea name="tier_labels" rows="4">{{ form.tier_labels or '' }}</textarea></label>
+  {% if not collection %}
+  <label>Tiers <span class="hint">One name per line, easiest first. You can change them later.</span>
+    <textarea name="tiers" rows="4">{{ form.tiers or '' }}</textarea></label>
+  {% endif %}
   <div class="actions">
     <button type="submit" class="primary">Save</button>
     <a class="button secondary" href="/">Dashboard</a>
   </div>
 </form>
+
 {% if collection %}
+<section class="card-panel" id="tiers">
+  <h2>Tiers</h2>
+  {% if notice %}<p class="notice">{{ notice }}</p>{% endif %}
+  <p class="muted small">Tier 1 is studied first; each later tier unlocks as the one before it is learned. Changes apply from your next study session.</p>
+  <form method="post" action="/collections/{{ collection.id }}/tiers" id="tiers-form">
+    <table class="cards tier-table">
+      <thead><tr><th>Tier</th><th>Name</th><th>Cards</th><th>Order</th><th>Move its cards to</th><th></th></tr></thead>
+      <tbody>
+      {% for t in snap.tiers %}
+        <tr>
+          <td>{{ t.tier }}{% if not t.unlocked %} <span class="badge locked">locked</span>{% endif %}</td>
+          <td><input type="text" name="label_{{ t.tier }}" value="{{ collection.tier_labels.get(t.tier, '') }}" placeholder="Tier {{ t.tier }}" aria-label="Name of tier {{ t.tier }}"></td>
+          <td>{% if t.total %}<a href="/browse?collection_id={{ collection.id }}&amp;tier={{ t.tier }}">{{ t.total }}</a>{% else %}<span class="muted">empty</span>{% endif %}</td>
+          <td class="nowrap">
+            <button type="submit" name="op" value="up:{{ t.tier }}" title="Move up" aria-label="Move tier {{ t.tier }} up" {% if loop.first %}disabled{% endif %}>↑</button>
+            <button type="submit" name="op" value="down:{{ t.tier }}" title="Move down" aria-label="Move tier {{ t.tier }} down" {% if loop.last %}disabled{% endif %}>↓</button>
+          </td>
+          <td class="nowrap">{% if t.total and snap.tiers|length > 1 %}
+            <select name="move_to_{{ t.tier }}" aria-label="Move tier {{ t.tier }}'s cards to">
+              {% for o in snap.tiers if o.tier != t.tier %}<option value="{{ o.tier }}">{{ collection.tier_label(o.tier) }}</option>{% endfor %}
+            </select>
+            <button type="submit" name="op" value="move:{{ t.tier }}">Move</button>{% endif %}
+          </td>
+          <td><button type="submit" name="op" value="delete:{{ t.tier }}" class="delete-tier" data-cards="{{ t.total }}" data-tier="{{ t.tier }}">Delete</button></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">No tiers yet. Add one below.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="actions">
+      <button type="submit" name="op" value="save" class="primary">Save names</button>
+      <input type="text" name="new_label" placeholder="New tier name" aria-label="New tier name">
+      <button type="submit" name="op" value="add">+ Add tier</button>
+    </div>
+  </form>
+  <p class="muted small">To move individual cards, open <a href="/browse?collection_id={{ collection.id }}">this collection's cards</a>, tick them, and use “Move to tier”.
+    To combine collections or get an AI-suggested tier order, use <a href="/collections/organize?ids={{ collection.id }}">Suggest tier order with AI</a>.</p>
+</section>
+
 <div class="actions danger-zone">
   <a class="button secondary" href="/collections/{{ collection.id }}/export">Export JSON</a>
   <form method="post" action="/collections/{{ collection.id }}/archive"><button type="submit">{{ "Unarchive" if collection.archived else "Archive" }} collection</button></form>
 </div>
 {% endif %}
+<script type="module">
+  document.querySelectorAll(".delete-tier").forEach((button) => button.addEventListener("click", (e) => {
+    const n = Number(button.dataset.cards);
+    const question = n
+      ? `Delete tier ${button.dataset.tier}? Its ${n} card${n === 1 ? "" : "s"} will be archived (history is kept), and the tiers after it move up.`
+      : `Delete empty tier ${button.dataset.tier}?`;
+    if (!confirm(question)) e.preventDefault();
+  }));
+</script>
 {% endblock %}

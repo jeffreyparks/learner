@@ -2,8 +2,19 @@
 {% from "_macros.html" import errors_list %}
 {% block title %}Import · Learner{% endblock %}
 {% block content %}
-<h1>Import a collection</h1>
-<p class="muted">A JSON file in the export format (see DESIGN.md §11). The collection is matched by name; cards with an <code>id</code> are updated, cards without one are added. Nothing is written unless the whole file is valid.</p>
+<h1>Import</h1>
+
+<section class="card-panel">
+  <h2>Anki decks</h2>
+  <p class="muted small">Upload an Anki export (<code>.apkg</code>) below, or put it in the <code>imports/</code> folder. You'll see a preview before anything is imported.
+    Subdecks become their own collections, grouped under the parent deck; review history isn't brought over.</p>
+  {% if anki_files %}
+  <ul class="plain-list">{% for f in anki_files %}<li><a href="/import/anki?file={{ f|urlencode }}">{{ f }}</a> <span class="muted small">preview</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted small">No decks in <code>imports/</code> yet.</p>{% endif %}
+</section>
+
+<h2>Learner collections (JSON)</h2>
+<p class="muted">A JSON file in the export format (see DESIGN.md §11). The collection is matched by group and name; cards with an <code>id</code> are updated, cards without one are added. Nothing is written unless the whole file is valid.</p>
 {% if result and result.errors %}{{ errors_list(result.errors) }}{% endif %}
 {% if result and not result.errors %}
 <p class="notice">Imported into <a href="/browse?collection_id={{ result.collection_id }}">{{ result.collection_name }}</a>:
@@ -21,7 +32,8 @@
 {% endif %}
 {% endif %}
 <form method="post" enctype="multipart/form-data" class="stacked">
-  <label>File <input type="file" name="file" accept=".json,application/json"></label>
+  <label>File <span class="hint">a Learner JSON export, or an Anki .apkg deck</span>
+    <input type="file" name="file" accept=".json,.apkg,application/json"></label>
   <label>…or paste JSON <textarea name="text" rows="10" class="code" spellcheck="false">{{ text }}</textarea></label>
   <div class="actions"><button type="submit" class="primary">Import</button></div>
 </form>

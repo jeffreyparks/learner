@@ -18,6 +18,7 @@ class Config:
     db_path: str = "learner.db"
     port: int = 8765
     open_browser: bool = True
+    max_image_mb: float = 4.0  # per image; the API also limits image size, so keep this modest
     # [study]
     session_size: int = 20
     new_per_session: int = 5
@@ -47,6 +48,8 @@ class Config:
         for name in ("refresher_pct", "unlock_pct"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ConfigError(f"{name} must be between 0 and 1")
+        if not 0 < self.max_image_mb <= 20:
+            raise ConfigError("max_image_mb must be more than 0 and at most 20")
         if self.provider not in ("claude", "fake", "off"):
             raise ConfigError('provider must be "claude", "fake" or "off"')
         for name in ("effort", "sequence_effort", "draft_effort"):
@@ -55,7 +58,7 @@ class Config:
 
 
 SECTIONS = {
-    "app": ("db_path", "port", "open_browser"),
+    "app": ("db_path", "port", "open_browser", "max_image_mb"),
     "study": (
         "session_size",
         "new_per_session",

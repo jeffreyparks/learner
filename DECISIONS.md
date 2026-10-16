@@ -130,3 +130,65 @@ Why the design in [DESIGN.md](DESIGN.md) is the way it is. Numbered entries are 
 | 67 | Drafted cards keep the AI's concepts as a normal (not manual) analysis | They're ordered right away, and the next rebuild can still refine them. |
 | 68 | Stats show one chart (answers per day, single series) and otherwise tables and tiles | Most of these numbers are read, not compared visually; one chart avoids dual axes and colour legends. |
 | 69 | Adaptive prerequisite refresh stays on the To-Do list | Better decided once real use (the weakest-concepts table) shows misses clustering on prerequisites. |
+
+**Round 13 (Phase 5 design: images and Anki import)**
+
+| # | Change | Why |
+|---|---|---|
+| 70 | Images in both prompts and reference answers; raster formats only (no SVG) | Diagrams and charts are common in technical material; SVG can carry scripts. |
+| 71 | Images stored inside `learner.db`, deduplicated by fingerprint | Keeps the one-file principle (#2) for backup. |
+| 72 | The AI grader and hints see card images | Otherwise image-based questions can't be graded. |
+| 73 | Collections get an optional group label (one level), with names unique per group | Supports e.g. a Data science group holding Experiments, Forecasting, MMM and Probability, without a full hierarchy. |
+| 74 | Anki subdecks become separate collections (grouped under the parent deck), never tiers | Matches how you want to organise subjects. |
+| 75 | Anki review history is not imported; everything starts as `new` | Anki's schedule doesn't map onto session streaks, and a fresh start is simpler. |
+| 76 | Anki import previews before writing, and re-imports update by Anki note id | Shared decks vary a lot; you see the mapping first, and updated decks don't duplicate. |
+| 77 | `imports/` is the drop folder for decks; its contents are git-ignored | Decks can be large or personal. |
+
+**Round 14 (Phase 5: images and groups built)**
+
+| # | Change | Why |
+|---|---|---|
+| 78 | Default image limit 4 MB (`max_image_mb`), image type detected from the file's bytes | Stays inside the AI API's image limits; a renamed file can't pass as an image. |
+| 79 | The migration runner turns foreign keys off around migrations and checks them afterwards | Changing the collection name rule required rebuilding a table, which SQLite only allows that way. |
+| 80 | Image tools appear on text fields only (prompt, and the reference answer of text cards) | Images don't belong inside code answers. |
+
+**Round 15 (Phase 5: Anki import built)**
+
+| # | Change | Why |
+|---|---|---|
+| 81 | Read Anki's database in memory with the untrusted-schema protection on; read its protobuf settings with a tiny built-in decoder | Decks can come from anywhere; avoiding Anki's own (large) package keeps dependencies small. Adds `zstandard`, `markdownify` (with BeautifulSoup). |
+| 82 | Follow each note type's own card templates instead of special-casing "Basic"/"Cloze" | Custom note types (like Yanki's) and reversed / type-in / optional-reverse cards work without extra code. |
+| 83 | On re-import, Anki's prompt, answer and tags win; your tier, answer format, key points, links and archived state are kept | The deck stays the source for content; local study choices aren't lost. |
+| 84 | Uploaded decks are saved into `imports/`; the preview and import refer to files there by plain name only | One place for decks, and no file paths ever come from the browser. |
+| 85 | AI-suggested key points for imported cards moved to the To-Do list | Grading already works against the reference answer; better to see real use first. |
+
+**Round 16 (Anki subdecks as tiers)**
+
+| # | Change | Why |
+|---|---|---|
+| 86 | Anki subdecks become **tiers** of one collection by default (supersedes #74); "separate collections" stays as a per-deck option | Matches how you want subjects organised: one SQL collection stepping up through its subdecks. |
+| 87 | Tier order is shown and editable on the preview, starting from Anki's order; an AI button suggests a foundations-first order | Anki's alphabetical order says nothing about difficulty, and a guess is better confirmed than silently applied. |
+| 88 | If a same-named collection already has other cards, the import defaults to "<name> (Anki)" | Avoids mixing an Anki deck into, say, the starter SQL collection by accident. |
+| 89 | Tiers from the preview apply on every import (overriding local tiers), unlike other local edits | It's an explicit choice made at import time; it also lets you switch layouts later. |
+
+**Round 17 (combine and re-tier collections)**
+
+| # | Change | Why |
+|---|---|---|
+| 90 | One "Combine or re-tier" tool maps every (collection, tier) row to a tier of a target collection, reusing the import's controls and AI ordering | Same mental model as the Anki import; merging, reordering and re-tiering are all the same operation. |
+| 91 | The target must be new or one of the chosen collections | Prevents accidentally pouring cards into an unrelated collection. |
+| 92 | Moving cards doesn't touch their content or `updated_at` | Progress, history and concept analyses stay valid; no forced re-sequencing. |
+| 93 | Emptied source collections are archived, not deleted | Consistent with "no hard delete"; easy to undo by hand. |
+
+**Round 18 (managing tiers)**
+
+| # | Change | Why |
+|---|---|---|
+| 94 | Tiers are always 1…N with one label entry each; only `tiers.py` changes them, in one transaction, followed by a tidy step (also at startup and after imports/combines) | Free-text labels drifted out of step with the cards; one owner plus an enforced rule makes that impossible. |
+| 95 | Tier labels are no longer free text after creation; the Tiers panel (rename, ↑/↓, move cards, delete, add) owns them | One place, one set of rules. |
+| 96 | Deleting a tier archives its cards; they're parked beyond the last tier and go to the last tier if unarchived | Your choice: archive, not move. Parking prevents phantom tiers. |
+| 97 | Empty tiers are allowed and never block unlocking | Lets you set up tiers before adding cards, without locking later tiers. |
+| 98 | Unlocked tiers stay unlocked through reorganising | Reorganising should never take away access. |
+| 99 | Card form tier = dropdown of real tiers + "new tier"; bulk "Move selected to" on the Cards page | Card-level moves can't create unlabelled tiers. |
+| 100 | No drag and drop | Tiers are few (buttons suffice); bulk moves are faster with checkboxes; less JavaScript to maintain. |
+| 101 | "Combine or re-tier" renamed "Combine collections"; single-collection hand edits live in the Tiers panel | Avoids two places doing the same job. |

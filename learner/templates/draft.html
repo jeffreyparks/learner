@@ -23,7 +23,7 @@
     <label>Collection
       <select name="collection_id" required>
         <option value="">Choose…</option>
-        {% for c in collections %}<option value="{{ c.id }}" {% if collection_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        {% for c in collections %}<option value="{{ c.id }}" {% if collection_id == c.id %}selected{% endif %}>{{ c.display_name }}</option>{% endfor %}
       </select>
     </label>
     <label>How many

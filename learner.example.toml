@@ -6,6 +6,7 @@
 db_path = "learner.db"      # SQLite file holding cards and progress
 port = 8765                 # served on 127.0.0.1 only
 open_browser = true         # open a browser tab on start
+max_image_mb = 4.0          # largest image you can add to a card
 
 [study]
 session_size = 20           # cards planned per session (missed cards that come back are extra)
