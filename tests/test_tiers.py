@@ -164,3 +164,60 @@ def test_reset_restores_starter_and_keeps_a_backup(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM attempt").fetchone()[0] == 0
     conn.close()
     assert len(list((tmp_path / "backups").glob("learner-*.db"))) == 1
+
+
+def test_retier_starts_afresh_and_drops_empty_tiers(conn):
+    cid = collection(conn, labels={1: "Old A", 2: "Old B", 3: "Old C"}, cards=(1, 2, 3, 3))
+    store.raise_unlocked_tier(conn, cid, 3)
+    ids = [c.id for c in store.list_cards(conn, cid)]
+    shelved = store.save_card(conn, cid, CardIn(tier=3, prompt="Shelved", reference_answer="x", archived=True))
+    # Five proposed names, but nothing is assigned to tiers 2 and 4: they disappear and the rest close up.
+    changed = tiers.retier(conn, cid, ["Fundamentals", "Basics", "Intermediate", "Unused", "Advanced"],
+                           {ids[0]: 3, ids[1]: 1, ids[2]: 1, ids[3]: 5})
+    labels, _, unlocked = layout(conn, cid)
+    assert labels == {1: "Fundamentals", 2: "Intermediate", 3: "Advanced"}
+    assert unlocked == 1  # unlocks re-open from progress, not from the old layout
+    assert [store.get_card(conn, i).tier for i in ids] == [2, 1, 1, 3]
+    assert store.get_card(conn, shelved).tier == 3  # archived cards stay inside the new range
+    assert changed == 3
+
+
+def test_retier_rejects_a_card_without_a_listed_tier(conn):
+    cid = collection(conn)
+    first = store.list_cards(conn, cid)[0].id
+    with pytest.raises(tiers.TierError):
+        tiers.retier(conn, cid, ["Fundamentals", "Advanced"], {first: 3})
+    with pytest.raises(tiers.TierError):
+        tiers.retier(conn, cid, [], {first: 1})
+    assert layout(conn, cid)[0] == {1: "A", 2: "B", 3: "C"}  # nothing changed
+
+
+def test_ai_tiers_are_clamped_and_skipped_cards_keep_their_place(conn):
+    from learner import tutor
+    from learner.llm import FakeProvider
+    cid = collection(conn, cards=(1, 2, 3, 4))
+    cards = store.list_cards(conn, cid)
+    reply = {"tiers": ["Fundamentals", " ", "Advanced", "Fundamentals"],
+             "cards": [{"card_id": cards[0].id, "tier": 0}, {"card_id": cards[1].id, "tier": 9},
+                       {"card_id": 999, "tier": 1}]}  # unknown id ignored; cards 3 and 4 skipped
+    result = tutor.suggest_tiers(FakeProvider({"sequence": reply}), "C", cards)
+    assert result.labels == ["Fundamentals", "Advanced"]  # blanks and repeats dropped
+    assert result.tiers == {cards[0].id: 1, cards[1].id: 2, cards[2].id: 2, cards[3].id: 2}
+
+
+def test_retier_screen_previews_then_applies(tmp_path):
+    from learner.llm import FakeProvider
+    client = TestClient(create_app(Config(db_path=str(tmp_path / "r.db"), provider="off"), FakeProvider()),
+                        base_url="http://127.0.0.1")
+    c = store.connect(tmp_path / "r.db")
+    cid = collection(c, labels={1: "Old"}, cards=(1,) * 6)
+    preview = client.post(f"/collections/{cid}/retier").text
+    assert 'value="Fundamentals"' in preview and 'value="Advanced"' in preview and "Nothing changes until you apply" in preview
+    assert store.get_collection(c, cid).tier_labels == {1: "Old"}  # the preview changes nothing
+    form = {"label_1": "Fundamentals", "label_2": "Intermediate", "label_3": "Advanced"}
+    for n, card in enumerate(store.list_cards(c, cid)):
+        form[f"tier_{card.id}"] = str(1 + n // 2)
+    client.post(f"/collections/{cid}/retier/apply", data=form)
+    assert store.get_collection(c, cid).tier_labels == {1: "Fundamentals", 2: "Intermediate", 3: "Advanced"}
+    assert [x.tier for x in store.list_cards(c, cid)] == [1, 1, 2, 2, 3, 3]
+    c.close()

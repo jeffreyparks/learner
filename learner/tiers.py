@@ -140,6 +140,29 @@ def move_cards(conn: sqlite3.Connection, card_ids: list[int], collection_id: int
         return cur.rowcount
 
 
+def retier(conn: sqlite3.Connection, collection_id: int, labels: list[str], assignment: dict[int, int]) -> int:
+    """Start the collection's tiers afresh (DESIGN.md §12.6): tier n is named labels[n - 1] and each card
+    goes to its assigned tier. Tiers nobody was assigned to are dropped and the rest closed up.
+    Cards left out of `assignment`, and archived cards, keep their number clamped into the new range.
+    Unlocks start over from tier 1 (they re-open from progress); attempt history is untouched.
+    Returns how many cards changed tier."""
+    if not labels or any(not 1 <= t <= len(labels) for t in assignment.values()):
+        raise TierError("Every card needs one of the listed tiers.")
+    used = sorted(set(assignment.values())) or [1]
+    number = {old: new for new, old in enumerate(used, start=1)}
+    with conn:
+        _state(conn, collection_id)  # raises if the collection doesn't exist
+        changed = 0
+        for card_id, tier in conn.execute("SELECT id, tier FROM card WHERE collection_id = ?", (collection_id,)).fetchall():
+            new = number[assignment[card_id]] if card_id in assignment else min(tier, len(used))
+            if new != tier:
+                conn.execute("UPDATE card SET tier = ? WHERE id = ?", (new, card_id))
+                changed += 1
+        _write(conn, collection_id, {number[old]: labels[old - 1].strip() for old in used}, 1)
+        _tidy(conn, collection_id)
+        return changed
+
+
 def delete(conn: sqlite3.Connection, collection_id: int, tier: int) -> int:
     """Delete a tier: its active cards are archived (history kept), and the tiers above move down.
     Returns how many cards were archived."""

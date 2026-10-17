@@ -772,6 +772,47 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             target = store.get_collection(conn, result.collection_id)
         return organize_page(request, [], "", "", {}, result=(result, target))
 
+    # --- AI re-tiering of one collection (DESIGN.md §12.6) ---
+
+    def retier_page(request, conn, collection: Collection, labels: list[str], assignment: dict[int, int], errors=()):
+        cards = store.list_cards(conn, collection.id)
+        attempted = {a.card_id for a in store.list_attempts(conn, collection.id)}
+        return page(request, "retier.html", collection=collection, cards=cards, labels=labels, assignment=assignment,
+                    attempted=attempted, errors=list(errors))
+
+    @app.post("/collections/{collection_id:int}/retier")
+    def retier_suggest(request: Request, collection_id: int):  # plain `def`: one slow AI call
+        with db() as conn:
+            collection = load_collection(conn, collection_id)
+            cards = store.list_cards(conn, collection_id)
+            if provider is None or not cards:
+                reason = "Sorting into tiers needs AI, and none is set up." if provider is None else "This collection has no cards."
+                return redirect(f"/collections/{collection_id}?tiers={quote(reason)}#tiers")
+            try:
+                suggestion = tutor.suggest_tiers(provider, collection.name, cards)
+            except LLMError as exc:
+                return redirect(f"/collections/{collection_id}?tiers={quote(f'Couldn’t suggest tiers ({exc}).')}#tiers")
+            return retier_page(request, conn, collection, suggestion.labels, suggestion.tiers)
+
+    @app.post("/collections/{collection_id:int}/retier/apply")
+    async def retier_apply(request: Request, collection_id: int):
+        form = await request.form()
+        labels, n = [], 1
+        while f"label_{n}" in form:
+            labels.append(str(form[f"label_{n}"]).strip())
+            n += 1
+        with db() as conn:
+            collection = load_collection(conn, collection_id)
+            cards = store.list_cards(conn, collection_id)
+            assignment = {c.id: _int(form.get(f"tier_{c.id}")) or 0 for c in cards}
+            try:
+                changed = tiers.retier(conn, collection_id, labels, assignment)
+            except tiers.TierError as exc:
+                return retier_page(request, conn, collection, labels, assignment, [str(exc)])
+            count = tiers.count(conn, collection_id)
+        message = f"Sorted into {count} tier{'' if count == 1 else 's'}; {changed} card{'' if changed == 1 else 's'} changed tier."
+        return redirect(f"/collections/{collection_id}?tiers={quote(message)}#tiers")
+
     # --- card order (sequencing) ---
 
     @app.get("/collections/{collection_id:int}/order")
