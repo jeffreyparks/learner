@@ -148,6 +148,8 @@ class FakeProvider:
         if task == "sequence" and "<subdecks>" in user:  # ordering an Anki deck's subdecks
             names = re.findall(r'<subdeck name="([^"]*)"', user)
             return {"order": list(reversed(names))}
+        if task == "sequence" and "Return the tier names" in system:  # sorting a collection into tiers
+            return self._retier(user)
         if task == "sequence":
             return self._sequence(user)
         if task == "draft":
@@ -168,6 +170,15 @@ class FakeProvider:
             "equivalent_approach": False,
         }
 
+
+    @staticmethod
+    def _retier(user: str) -> dict:
+        """Three tiers of equal size, in card id order."""
+        ids = sorted(int(i) for i in re.findall(r'<card id="(\d+)"', user))
+        return {
+            "tiers": ["Fundamentals", "Intermediate", "Advanced"],
+            "cards": [{"card_id": cid, "tier": 1 + min(2, 3 * n // len(ids))} for n, cid in enumerate(ids)],
+        }
 
     @staticmethod
     def _sequence(user: str) -> dict:

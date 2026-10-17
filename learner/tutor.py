@@ -202,6 +202,63 @@ def analyze_tier(
     return result
 
 
+MAX_TIERS = 5
+
+RETIER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tiers": {"type": "array", "items": {"type": "string"}},
+        "cards": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"card_id": {"type": "integer"}, "tier": {"type": "integer"}},
+                "required": ["card_id", "tier"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["tiers", "cards"],
+    "additionalProperties": False,
+}
+
+
+@dataclass(frozen=True)
+class Retier:
+    labels: list[str]  # tier names in study order; tier n is labels[n - 1]
+    tiers: dict[int, int]  # card id → tier
+
+
+def suggest_tiers(provider: LLMProvider, collection_name: str, cards: Sequence[Card]) -> Retier:
+    """Sort every card of a collection into 1–5 tiers in one call (DESIGN.md §12.6).
+
+    The cards' current tiers are deliberately not shown. Cards the model leaves out keep their old tier
+    number (clamped to the new tier count), so nothing is lost.
+    """
+    blocks = "\n\n".join(
+        f'<card id="{c.id}">\n{escape(c.prompt[:300])}\n<answer>{escape(c.reference_answer[:200])}</answer>\n</card>'
+        for c in cards
+    )
+    system, user = render("retier", collection=escape(collection_name), cards=blocks)
+    data = provider.complete("sequence", system, user, RETIER_SCHEMA)
+    names = [unescape(str(n)).strip() for n in data.get("tiers") or []]
+    labels = list(dict.fromkeys(n for n in names if n))[:MAX_TIERS]
+    if not labels:
+        raise LLMError("The AI didn't suggest any tiers.")
+    wanted = {c.id: c for c in cards}
+    assigned: dict[int, int] = {}
+    for item in data.get("cards") or []:
+        try:
+            card_id, tier = int(item["card_id"]), int(item["tier"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if card_id in wanted:
+            assigned[card_id] = max(1, min(tier, len(labels)))
+    if wanted and not assigned:
+        raise LLMError("The AI didn't place any card in a tier.")
+    return Retier(labels, {cid: assigned.get(cid, min(c.tier, len(labels))) for cid, c in wanted.items()})
+
+
 DRAFT_SCHEMA = {
     "type": "object",
     "properties": {

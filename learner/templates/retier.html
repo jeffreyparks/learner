@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors_list %}
+{% block title %}Sort into tiers · {{ collection.display_name }}{% endblock %}
+{% block content %}
+<h1>Sort into tiers · {{ collection.display_name }}</h1>
+{{ errors_list(errors) }}
+<p class="muted">The AI sorted every card by difficulty, ignoring the tiers and names you have now. Nothing changes until you apply.
+  Rename the tiers or change any card's tier first. Tiers left without cards are dropped. Unlocks start again from the first tier and
+  re-open as you learn cards; answers and history are kept. Rebuild the card order afterwards so the order within each new tier is up to date.</p>
+<form method="post" action="/collections/{{ collection.id }}/retier/apply">
+  <section class="card-panel">
+    <h2>Tiers</h2>
+    <div class="row stacked-inline">
+      {% for label in labels %}
+      <label>Tier {{ loop.index }} <input type="text" name="label_{{ loop.index }}" value="{{ label }}"></label>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="card-panel">
+    <h2>Cards</h2>
+    <table class="table">
+      <thead><tr><th>Card</th><th>Now</th><th>New tier</th></tr></thead>
+      <tbody>
+      {% for c in cards %}
+      <tr>
+        <td><a href="/cards/{{ c.id }}">{{ c.prompt|card_title }}</a>{% if c.id in attempted %} <span class="muted small">(has history)</span>{% endif %}</td>
+        <td class="muted">{{ collection.tier_label(c.tier) }}</td>
+        <td><select name="tier_{{ c.id }}" aria-label="Tier for card {{ c.id }}">
+          {% for label in labels %}<option value="{{ loop.index }}" {{ "selected" if assignment.get(c.id) == loop.index }}>{{ loop.index }} · {{ label or "Tier " ~ loop.index }}</option>{% endfor %}
+        </select></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <div class="actions">
+    <button type="submit" class="primary">Apply tiers</button>
+    <a class="button secondary" href="/collections/{{ collection.id }}#tiers">Cancel</a>
+  </div>
+</form>
+{% endblock %}

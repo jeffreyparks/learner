@@ -53,6 +53,7 @@ Collection        e.g. "Python", "SQL", "Machine Learning"
 - **Tiers** are numeric with optional display labels. Numbers keep the logic simple, and labels keep it readable.
 - **Archiving** a collection hides it from the dashboard and keeps its history, the same as archiving a card. There's no hard delete from the UI.
 - **Tier gating is the only lock in the app, and it's soft.** If you start a tier before it's unlocked, the app warns you and lets you continue.
+- **Which tier a card is in** can be set by hand or by AI (§12.6, usually *Fundamentals*, *Intermediate*, *Advanced*, never more than five from the AI).
 - **Within a tier**, there's no manual ordering. The concept graph (§6) decides which new card comes next.
 
 ---
@@ -401,6 +402,21 @@ There is no progress table. Status, streak, and last-seen time are calculated fr
 - **Combine collections** (§12.4) is for merging collections and AI-suggested tier orders; hand edits to one collection's tiers happen in the Tiers panel.
 - A study session in progress refers to its tier by number, so tier changes apply from the next session.
 - Drag and drop was considered and left out: tiers are few (buttons are one click), and moving many cards is faster with checkboxes than dragging.
+- **Sort all cards into tiers with AI** (§12.6) starts a collection's tiers afresh.
+
+### 12.6 AI sorting into tiers
+
+**Goal:** let the AI decide which tier each card belongs in, not just the order of tiers (§12.4) or of cards within a tier (§6). It's a fresh start: the current tiers, their names and the unlock state are ignored, because they may no longer fit the cards.
+
+- **Where:** a "Sort all cards into tiers with AI" button in the Tiers panel (Edit collection), shown when AI is set up. It always covers every active card in the collection; there is no partial mode.
+- **One call** (`prompts/retier.md`, the `sequence` model). The model sees each card's prompt and reference answer (shortened), but not its tier. It returns tier names in study order plus one tier number per card.
+- **Shape of the tiers:** by default three, named *Fundamentals*, *Intermediate*, *Advanced*. The model may use four or five when the material has clearly more stages, and **never more than five** (`tutor.MAX_TIERS`; extra names are dropped and tier numbers clamped). Small collections get fewer. Blank and repeated names are dropped.
+- **A card never sits earlier than what it builds on** is stated in the prompt, and is checked afterwards the usual way: the Card order page's tier-mismatch warnings (§6.7) flag any card that needs a concept only taught in a later tier. Concept analyses are not recomputed by this step.
+- **Preview, then apply.** The result opens a review page where you rename the tiers and change any card's tier from a dropdown. Nothing is saved until **Apply tiers**.
+- **What apply does** (`tiers.retier`, in one transaction, then the usual tidy of §12.5): tier *n* gets the *n*th name; tiers nobody was assigned to are dropped and the rest close up, so tiers stay 1…N with one label each; **unlocks start over from tier 1** and re-open from progress, since the old unlocked numbers refer to a layout that no longer exists. Cards the model skipped keep their old tier number (clamped). Archived cards keep their number, clamped into the new range.
+- **What is kept:** card ids, attempt history, status and concept analyses (manual ones included). The review page marks cards that have history. Because order within a tier comes from the concept graph, the new tiers are ordered automatically; "Rebuild order" refreshes concept names if wanted.
+- **Failure:** if the AI call fails or returns nothing usable, the collection is left as it was and the Tiers panel says why.
+- **Not covered:** choosing a tier for selected cards only, and per-card reasons. The hand tools in §12.5 remain for small adjustments.
 
 ---
 

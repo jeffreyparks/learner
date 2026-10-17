@@ -62,6 +62,12 @@
       <button type="submit" name="op" value="add">+ Add tier</button>
     </div>
   </form>
+  {% if ai_grading and snap and snap.cards %}
+  <form method="post" action="/collections/{{ collection.id }}/retier" class="actions">
+    <button type="submit" id="retier-button">Sort all cards into tiers with AI</button>
+    <span class="muted small">Starts afresh: 3–5 tiers (Fundamentals … Advanced). You review before anything changes.</span>
+  </form>
+  {% endif %}
   <p class="muted small">To move individual cards, open <a href="/browse?collection_id={{ collection.id }}">this collection's cards</a>, tick them, and use “Move to tier”.
     To combine collections or get an AI-suggested tier order, use <a href="/collections/organize?ids={{ collection.id }}">Suggest tier order with AI</a>.</p>
 </section>
