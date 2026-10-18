@@ -2,7 +2,7 @@ from itertools import count
 
 from learner import engine
 from learner.config import Config
-from learner.engine import CORRECT, INCORRECT, ASSISTED, KNOWN, LEARNING, NEW
+from learner.engine import CORRECT, INCORRECT, ASSISTED, REVEALED, KNOWN, LEARNING, NEW
 from learner.models import Attempt, Card
 
 _ids = count(1)
@@ -51,6 +51,19 @@ def test_miss_then_correct_in_same_session_does_not_count():
     c = card(1)
     p = status(c, [attempt(1, "s1", INCORRECT), attempt(1, "s1", CORRECT)])
     assert p.streak == 0 and p.status == LEARNING
+
+
+def test_peek_has_no_effect_on_the_score():
+    c = card(1)
+    assert status(c, [attempt(1, "s1", REVEALED)]).status == NEW  # only peeked: still new
+    known = [attempt(1, "s1", CORRECT), attempt(1, "s2", CORRECT)]
+    after_peek = status(c, known + [attempt(1, "s3", REVEALED)])
+    assert (after_peek.status, after_peek.streak, after_peek.attempts, after_peek.recent_accuracy) == (KNOWN, 2, 2, 1.0)
+
+
+def test_right_after_a_peek_in_the_same_session_does_not_count():
+    c = card(1)
+    assert status(c, [attempt(1, "s1", REVEALED), attempt(1, "s1", CORRECT)]).streak == 0
 
 
 def test_reset_ignores_earlier_attempts():
@@ -109,6 +122,13 @@ def test_missed_card_comes_back_after_gap():
     assert state.answered == 3 and state.remaining == 3  # cards 4, 5, and the miss
 
 
+def test_peeked_card_comes_back_after_gap():
+    cfg = Config(session_size=10, new_per_session=5, requeue_gap=1)
+    cards = [card(i) for i in range(1, 4)]
+    attempts = [attempt(1, "s", REVEALED), attempt(2, "s", CORRECT)]
+    assert engine.session_state(cards, attempts, "s", 1, cfg).next_card_id == 1
+
+
 def test_session_ends_when_plan_and_misses_are_done():
     cfg = Config(session_size=10, new_per_session=2, max_attempts_per_card=2)
     cards = [card(1), card(2)]
@@ -122,6 +142,13 @@ def test_session_summary_counts_newly_known():
     attempts = [attempt(1, "old", CORRECT), attempt(1, "s", CORRECT), attempt(2, "s", INCORRECT)]
     summary = engine.session_summary(cards, attempts, "s", known_streak=2)
     assert (summary.answered, summary.right, summary.wrong, summary.newly_known) == (2, 1, 1, 1)
+
+
+def test_session_summary_counts_peeks_separately():
+    cards = [card(1), card(2)]
+    attempts = [attempt(1, "s", REVEALED), attempt(2, "s", CORRECT)]
+    summary = engine.session_summary(cards, attempts, "s", known_streak=2)
+    assert (summary.right, summary.wrong, summary.revealed) == (1, 0, 1)
 
 
 def test_new_cards_follow_the_concept_order():

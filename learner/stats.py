@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from .engine import INCORRECT, LEARNING, Progress
+from .engine import INCORRECT, LEARNING, REVEALED, Progress
 from .models import Analysis, AttemptRecord, Card
 
 
@@ -28,6 +28,7 @@ class Totals:
 
 
 def totals(records: Sequence[AttemptRecord]) -> Totals:
+    records = [r for r in records if r.outcome != REVEALED]  # peeks aren't answers
     durations = sorted(r.duration_ms for r in records if r.duration_ms)
     median = durations[len(durations) // 2] / 1000 if durations else None
     return Totals(
@@ -54,6 +55,8 @@ def daily(records: Sequence[AttemptRecord], days: int = 30, today: date | None =
     today = today or datetime.now().astimezone().date()
     counts: dict[date, list[int]] = defaultdict(lambda: [0, 0])
     for r in records:
+        if r.outcome == REVEALED:
+            continue
         d = local_day(r.ts)
         counts[d][0] += 1
         counts[d][1] += r.outcome != INCORRECT

@@ -86,7 +86,7 @@ function initStudy(study) {
     return true;
   }
 
-  // "Show answer": study the reference without grading; it's recorded as a miss, so no score.
+  // "Show answer": study the reference without grading; it's recorded as `revealed`, which leaves the score alone.
   function showAnswer() {
     if (!reveal()) return;
     revealed = true;

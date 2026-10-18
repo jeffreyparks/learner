@@ -93,7 +93,7 @@ Every card, whatever its format, goes the same way:
 2. **Submit** (`Ctrl+Enter`). The reference answer and references appear immediately.
 3. **With an LLM configured**, its verdict and feedback follow a few seconds later. Accept it (`Enter`) or override it (`1` right / `2` wrong).
 4. **Otherwise you mark yourself** (`1` / `2`). That's the case when there's no API key, when the LLM call fails, or when you submit with the box empty (nothing to grade, which gives you a fast "just show me" path).
-5. **Or show the answer** (red button, `Alt+A`) instead of submitting: the reference appears with no grading and a single **Next** (`Enter`). It's recorded as `incorrect`, so the score never goes up from a peek and the card comes back later in the session.
+5. **Or show the answer** (red button, `Alt+A`) instead of submitting: the reference appears with no grading and a single **Next** (`Enter`). It's recorded as `revealed`, which has no effect on the score, and the card comes back later in the session.
 
 ### 5.2 Attempt outcomes
 Every attempt ends with exactly one outcome, whoever grades it:
@@ -103,6 +103,9 @@ Every attempt ends with exactly one outcome, whoever grades it:
 | `correct` | Right, no hints used | +1 (see §5.4) |
 | `assisted` | Right, but used **any** hint | unchanged |
 | `incorrect` | Wrong or partially right | reset to 0 |
+| `revealed` | **Show answer** instead of answering | unchanged, and not counted as right or wrong anywhere (status, accuracy, stats) |
+
+A peek still uses up the card's first attempt in that session, so answering it right after peeking can't raise the streak. A card that has only ever been peeked at stays `new`.
 
 ### 5.3 Card status
 Calculated from the card's attempts since its last `progress_reset_at`:

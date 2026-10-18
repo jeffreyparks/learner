@@ -17,6 +17,7 @@ from .sequencer import CardSequence
 
 NEW, LEARNING, KNOWN = "new", "learning", "known"
 CORRECT, ASSISTED, INCORRECT = "correct", "assisted", "incorrect"
+REVEALED = "revealed"  # "Show answer": no effect on the score either way (DESIGN.md §5.2)
 RECENT_WINDOW = 5  # attempts used to judge how weak a learning card is
 
 
@@ -40,23 +41,30 @@ class Progress:
 
 
 def card_progress(card: Card, attempts: Sequence[Attempt], known_streak: int) -> Progress:
-    """`attempts` are this card's attempts in order. Only a card's first attempt in a session can raise its streak."""
+    """`attempts` are this card's attempts in order. Only a card's first attempt in a session can raise its streak.
+
+    A `revealed` attempt changes nothing itself, but it still uses up the session's first attempt:
+    answering right after peeking can't raise the streak.
+    """
     counted = [a for a in attempts if card.progress_reset_at is None or a.ts > card.progress_reset_at]
-    if not counted:
+    scored = [a for a in counted if a.outcome != REVEALED]
+    if not scored:
         return Progress(NEW)
     streak = 0
     sessions_seen: set[str] = set()
     for a in counted:
         first_in_session = a.session_id not in sessions_seen
         sessions_seen.add(a.session_id)
+        if a.outcome == REVEALED:
+            continue
         if a.outcome == INCORRECT:
             streak = 0
         elif a.outcome == CORRECT and first_in_session:
             streak += 1
-    recent = counted[-RECENT_WINDOW:]
+    recent = scored[-RECENT_WINDOW:]
     accuracy = sum(a.outcome != INCORRECT for a in recent) / len(recent)
     status = KNOWN if streak >= known_streak else LEARNING
-    return Progress(status, streak, len(counted), accuracy, counted[-1].ts)
+    return Progress(status, streak, len(scored), accuracy, scored[-1].ts)
 
 
 def progress_map(
@@ -198,11 +206,11 @@ def session_state(
         last_outcome[a.card_id] = a.outcome
         counts[a.card_id] += 1
 
-    # Misses come back after `requeue_gap` other cards, up to `max_attempts_per_card` tries per session.
+    # Misses (and peeks) come back after `requeue_gap` other cards, up to `max_attempts_per_card` tries per session.
     pending = sorted(
         (i, card_id)
         for card_id, i in last_index.items()
-        if last_outcome[card_id] == INCORRECT and counts[card_id] < cfg.max_attempts_per_card
+        if last_outcome[card_id] in (INCORRECT, REVEALED) and counts[card_id] < cfg.max_attempts_per_card
     )
     due = [card_id for i, card_id in pending if len(session) - 1 - i >= cfg.requeue_gap]
     unseen = [card_id for card_id in plan if card_id not in last_index]
@@ -224,6 +232,7 @@ class SessionSummary:
     right: int
     wrong: int
     newly_known: int
+    revealed: int = 0
 
 
 def session_summary(
@@ -233,5 +242,6 @@ def session_summary(
     end = progress_map(cards, attempts, known_streak)
     session = [a for a in attempts if a.session_id == session_id]
     wrong = sum(a.outcome == INCORRECT for a in session)
+    revealed = sum(a.outcome == REVEALED for a in session)
     newly_known = sum(end[c.id].status == KNOWN and start[c.id].status != KNOWN for c in cards)
-    return SessionSummary(len(session), len(session) - wrong, wrong, newly_known)
+    return SessionSummary(len(session), len(session) - wrong - revealed, wrong, newly_known, revealed)

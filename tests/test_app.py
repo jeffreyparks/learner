@@ -64,14 +64,15 @@ def test_without_llm_every_card_is_self_marked(client):
     assert 'id="hint-button"' not in html and "you mark your own answers" in html
 
 
-def test_show_answer_is_offered_and_records_a_miss(client, tmp_path):
+def test_show_answer_is_offered_and_records_a_peek(client, tmp_path):
     url = start_session(client)
     html = client.get(url).text
-    assert 'id="show-answer" class="bad"' in html and "won't raise your score" in html
+    assert 'id="show-answer" class="bad"' in html and "no effect on your score" in html
     card_id = card_id_on(html)
-    client.post(url, data={"card_id": card_id, "result": "wrong", "answer": ""})  # what the Next button sends
+    # What the Next button sends; a stray verdict is ignored, since nothing was graded.
+    client.post(url, data={"card_id": card_id, "result": "revealed", "answer": "", "llm_verdict": "correct"})
     row = last_attempt(tmp_path)
-    assert (row["outcome"], row["llm_verdict"], row["overridden"]) == ("incorrect", None, 0)
+    assert (row["outcome"], row["llm_verdict"], row["overridden"]) == ("revealed", None, 0)
 
 
 def test_self_marked_attempt_records_no_verdict(client, tmp_path):

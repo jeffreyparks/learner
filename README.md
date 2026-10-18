@@ -77,7 +77,7 @@ uv run learner-eval run
 
 - `Ctrl+Enter` (or `Space` when I'm not in the answer box): submit my answer
 - `Alt+H`: ask for a hint. I get up to three, each one more specific.
-- `Alt+A` (the red **Show answer** button): skip straight to the reference answer to study it. No grading; it counts as a miss, so my score doesn't go up and the card comes back later in the session.
+- `Alt+A` (the red **Show answer** button): skip straight to the reference answer to study it. No grading, and no effect on my score either way; the card just comes back later in the session for a real try.
 - After submitting: `Enter` accepts the grader's verdict, `1` marks it right, `2` marks it wrong
 
 ## Running the tests

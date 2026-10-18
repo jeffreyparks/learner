@@ -40,7 +40,7 @@
       <button type="button" id="show-answer" class="bad">Show answer <kbd>Alt+A</kbd></button>
       <span id="hint-status" class="muted small" aria-live="polite"></span>
     </div>
-    <p class="muted small" id="show-answer-note">Stuck? It's fine to show the reference answer and study it. It just won't raise your score: it counts as a miss, and the card comes back for another try.</p>
+    <p class="muted small" id="show-answer-note">Stuck? It's fine to show the reference answer and study it. It has no effect on your score, up or down, and the card comes back later for a real try.</p>
 
     <section id="answer" class="card-panel answer" hidden>
       <div id="verdict" class="verdict" aria-live="polite" hidden></div>
@@ -57,8 +57,8 @@
       {% endif %}
 
       <div class="actions grade" id="revealed-row" hidden>
-        <span class="muted">You looked at the answer, so this counts as a miss (no score).</span>
-        <button type="submit" name="result" value="wrong" id="next-card" class="primary">Next <kbd>Enter</kbd></button>
+        <span class="muted">Peeked: this doesn't change your score. The card comes back later for a real try.</span>
+        <button type="submit" name="result" value="revealed" id="next-card" class="primary">Next <kbd>Enter</kbd></button>
       </div>
       <div class="actions grade" id="grade-row">
         <button type="submit" name="result" value="right" id="accept" class="primary" hidden>Accept <kbd>Enter</kbd></button>
