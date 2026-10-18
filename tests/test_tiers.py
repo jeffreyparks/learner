@@ -170,7 +170,7 @@ def test_retier_starts_afresh_and_drops_empty_tiers(conn):
     cid = collection(conn, labels={1: "Old A", 2: "Old B", 3: "Old C"}, cards=(1, 2, 3, 3))
     store.raise_unlocked_tier(conn, cid, 3)
     ids = [c.id for c in store.list_cards(conn, cid)]
-    shelved = store.save_card(conn, cid, CardIn(tier=3, prompt="Shelved", reference_answer="x", archived=True))
+    shelved, _ = store.save_card(conn, cid, CardIn(tier=3, prompt="Shelved", reference_answer="x", archived=True))
     # Five proposed names, but nothing is assigned to tiers 2 and 4: they disappear and the rest close up.
     changed = tiers.retier(conn, cid, ["Fundamentals", "Basics", "Intermediate", "Unused", "Advanced"],
                            {ids[0]: 3, ids[1]: 1, ids[2]: 1, ids[3]: 5})

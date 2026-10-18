@@ -37,8 +37,10 @@
     <div class="actions" id="submit-row">
       <button type="button" id="submit-answer" class="primary">Submit <kbd>Ctrl+Enter</kbd></button>
       {% if ai_grading %}<button type="button" id="hint-button">Hint <kbd>Alt+H</kbd></button>{% endif %}
+      <button type="button" id="show-answer" class="bad">Show answer <kbd>Alt+A</kbd></button>
       <span id="hint-status" class="muted small" aria-live="polite"></span>
     </div>
+    <p class="muted small" id="show-answer-note">Stuck? It's fine to show the reference answer and study it. It just won't raise your score: it counts as a miss, and the card comes back for another try.</p>
 
     <section id="answer" class="card-panel answer" hidden>
       <div id="verdict" class="verdict" aria-live="polite" hidden></div>
@@ -54,7 +56,11 @@
       <ul class="references">{% for r in card.references %}<li><a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a></li>{% endfor %}</ul>
       {% endif %}
 
-      <div class="actions grade">
+      <div class="actions grade" id="revealed-row" hidden>
+        <span class="muted">You looked at the answer, so this counts as a miss (no score).</span>
+        <button type="submit" name="result" value="wrong" id="next-card" class="primary">Next <kbd>Enter</kbd></button>
+      </div>
+      <div class="actions grade" id="grade-row">
         <button type="submit" name="result" value="right" id="accept" class="primary" hidden>Accept <kbd>Enter</kbd></button>
         <span id="grade-question">Did you get it right?</span>
         <button type="submit" name="result" value="right" class="good" id="mark-right">Right <kbd>1</kbd></button>

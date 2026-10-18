@@ -7,8 +7,8 @@ const isTyping = () => {
 };
 
 // Study screen: write → submit → reference appears at once, the LLM's verdict follows → accept or override.
-// Keys: Ctrl/Cmd+Enter (or Space outside the answer box) submit, Alt+H hint,
-// then Enter accepts the verdict, 1 marks right, 2 marks wrong.
+// Keys: Ctrl/Cmd+Enter (or Space outside the answer box) submit, Alt+H hint, Alt+A show answer,
+// then Enter accepts the verdict, 1 marks right, 2 marks wrong (after Show answer, Enter moves on).
 function initStudy(study) {
   const { cardId, format, dialect } = study.dataset;
   const llm = study.dataset.llm === "on";
@@ -22,10 +22,12 @@ function initStudy(study) {
   const question = document.getElementById("grade-question");
   const hintButton = document.getElementById("hint-button");
   const hintStatus = document.getElementById("hint-status");
+  const showAnswerNote = document.getElementById("show-answer-note");
   const started = performance.now();
   const hints = [];
   let submitted = false;
   let verdictReady = false;
+  let revealed = false;
   let editor = null;
 
   const answerText = () => input.value;
@@ -67,8 +69,9 @@ function initStudy(study) {
     verdictReady = true;
   }
 
-  async function submitAnswer() {
-    if (submitted) return;
+  // Lock the answer box and show the reference answer. Returns false if it was already shown.
+  function reveal() {
+    if (submitted) return false;
     submitted = true;
     if (editor) editor.setReadOnly(true);
     else {
@@ -78,7 +81,21 @@ function initStudy(study) {
     answerPanel.querySelectorAll("pre > code[class^='language-']").forEach((code) => highlightBlock(code.parentElement, format, dialect));
     answerPanel.hidden = false;
     submitRow.hidden = true;
+    showAnswerNote.hidden = true;
     answerPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return true;
+  }
+
+  // "Show answer": study the reference without grading; it's recorded as a miss, so no score.
+  function showAnswer() {
+    if (!reveal()) return;
+    revealed = true;
+    document.getElementById("grade-row").hidden = true;
+    document.getElementById("revealed-row").hidden = false;
+  }
+
+  async function submitAnswer() {
+    if (!reveal()) return;
 
     if (!llm) return;
     if (!answerText().trim()) {
@@ -126,6 +143,7 @@ function initStudy(study) {
 
   document.getElementById("submit-answer").addEventListener("click", submitAnswer);
   hintButton?.addEventListener("click", askForHint);
+  document.getElementById("show-answer").addEventListener("click", showAnswer);
   form.addEventListener("submit", (e) => {
     if (marked) return e.preventDefault(); // one answer per card, even if a key auto-repeats
     marked = true;
@@ -140,6 +158,14 @@ function initStudy(study) {
       } else if (e.altKey && e.code === "KeyH") {
         e.preventDefault();
         askForHint();
+      } else if (e.altKey && e.code === "KeyA") {
+        e.preventDefault();
+        showAnswer();
+      }
+    } else if (revealed) {
+      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        mark("next-card");
       }
     } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.key === "Enter" && verdictReady) {
