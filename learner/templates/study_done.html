@@ -3,7 +3,7 @@
 <section class="card-panel">
   <h1>Session complete</h1>
   {% if summary.answered %}
-  <p class="big">{{ summary.right }} right · {{ summary.wrong }} wrong{% if summary.newly_known %} · {{ summary.newly_known }} newly known{% endif %}</p>
+  <p class="big">{{ summary.right }} right · {{ summary.wrong }} wrong{% if summary.revealed %} · {{ summary.revealed }} peeked{% endif %}{% if summary.newly_known %} · {{ summary.newly_known }} newly known{% endif %}</p>
   {% else %}
   <p class="muted">No cards answered this session.</p>
   {% endif %}

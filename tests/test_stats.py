@@ -19,6 +19,13 @@ def test_totals():
     assert (t.attempts, t.right, t.with_hints, t.median_seconds) == (3, 2, 1, 6.0)
 
 
+def test_peeks_are_left_out_of_totals_and_daily():
+    records = [rec(1, 1, "correct", ts="2026-10-10T12:00:00"), rec(2, 1, "revealed", ts="2026-10-10T13:00:00")]
+    assert (stats.totals(records).attempts, stats.totals(records).right) == (1, 1)
+    days = stats.daily(records, days=1, today=date(2026, 10, 10))
+    assert [(d.attempts, d.right) for d in days] == [(1, 1)]
+
+
 def test_daily_includes_empty_days():
     days = stats.daily([rec(1, 1, "correct", ts="2026-10-10T12:00:00"), rec(2, 1, "incorrect", ts="2026-10-10T13:00:00")],
                        days=3, today=date(2026, 10, 11))

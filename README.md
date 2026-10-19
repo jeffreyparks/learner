@@ -53,6 +53,14 @@ Each collection's **Edit** page has a **Tiers** panel: I can rename tiers, move 
 
 **Combine collections** on the dashboard lets me fold several collections into one, each becoming a tier, the same way subdecks do on import. For example, Causal Inference, Causal Inference Fundamentals, Causal Inference DAGs, Causal Inference Potential Outcomes and Experiments become one Causal Inference collection: tier 1 basics, tier 2 fundamentals, and so on. I can set the tiers myself or ask the AI for an order. Picking a single collection gets me an AI-suggested order for its tiers. Progress and history come along, and anything left empty is archived, not deleted.
 
+## Making cards with any AI agent
+
+[skills/learner-cards](skills/learner-cards/SKILL.md) is an agent skill that teaches an AI agent the import format and how to write good cards, so I can ask any agent for "20 cards on pandas groupby" and get a file ready for **Import**. It follows the open Agent Skills layout (a `SKILL.md` with frontmatter), so Claude Code picks it up from `.claude/skills/` and other agents can load the folder or just read the file. It also has a JSON Schema (`schema.json`) for frameworks with structured output, and a no-dependency checker:
+
+```bash
+python skills/learner-cards/scripts/validate.py my-cards.json
+```
+
 ## Card order
 
 New cards get introduced so that a card teaching a concept comes before the cards that depend on it.
@@ -77,6 +85,7 @@ uv run learner-eval run
 
 - `Ctrl+Enter` (or `Space` when I'm not in the answer box): submit my answer
 - `Alt+H`: ask for a hint. I get up to three, each one more specific.
+- `Alt+A` (the red **Show answer** button): skip straight to the reference answer to study it. No grading, and no effect on my score either way; the card just comes back later in the session for a real try.
 - After submitting: `Enter` accepts the grader's verdict, `1` marks it right, `2` marks it wrong
 
 ## Running the tests

@@ -260,11 +260,11 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     async def study_answer(request: Request, collection_id: int, tier: int, session_id: str):
         form = await request.form()
         result = form.get("result")
-        if result not in ("right", "wrong"):
+        if result not in ("right", "wrong", "revealed"):
             raise HTTPException(400, "Bad answer")
         right = result == "right"
         hints_used = min(max(_int(form.get("max_hint_level")) or 0, 0), tutor.MAX_HINT_LEVEL)
-        llm_verdict = form.get("llm_verdict") if form.get("llm_verdict") in tutor.VERDICTS else None
+        llm_verdict = form.get("llm_verdict") if form.get("llm_verdict") in tutor.VERDICTS and result != "revealed" else None
         with db() as conn:
             card = load_card(conn, _int(form.get("card_id")) or 0)
             if card.collection_id != collection_id:
@@ -274,7 +274,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
                 # Not the card this session is showing: a repeat submit. Don't record it twice.
                 return redirect(f"/study/{collection_id}/{tier}/{session_id}")
             store.add_attempt(
-                conn, card.id, session_id, engine.outcome_for(right, hints_used),
+                conn, card.id, session_id, engine.REVEALED if result == "revealed" else engine.outcome_for(right, hints_used),
                 answer=form.get("answer") or None,
                 duration_ms=_int(form.get("duration_ms")),
                 max_hint_level=hints_used,

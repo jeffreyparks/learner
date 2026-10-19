@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from .checkers import FORMATS
 
 ANSWER_FORMATS = tuple(FORMATS)  # the registry in checkers.py is the single source
-OUTCOMES = ("correct", "assisted", "incorrect")
+OUTCOMES = ("correct", "assisted", "incorrect", "revealed")
 # sqlglot dialect names (used for syntax checking in Phase 1).
 SQL_DIALECTS = ("mysql", "postgres", "sqlite", "snowflake", "bigquery", "tsql", "duckdb")
 
