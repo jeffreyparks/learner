@@ -1,0 +1,45 @@
+{
+  "collection": "SQL Window Functions",
+  "group": "Data",
+  "sql_dialect": "postgres",
+  "tier_labels": {
+    "1": "Foundations",
+    "2": "Ranking and framing"
+  },
+  "cards": [
+    {
+      "tier": 1,
+      "answer_format": "text",
+      "prompt": "How does a window function differ from `GROUP BY` aggregation?",
+      "reference_answer": "`GROUP BY` **collapses** rows into one row per group. A window function computes over a set of related rows but **keeps every row**, adding the result as a new column.",
+      "rubric": [
+        "GROUP BY collapses rows",
+        "Window functions keep every row"
+      ],
+      "references": [
+        {
+          "title": "PostgreSQL tutorial: Window functions",
+          "url": "https://www.postgresql.org/docs/current/tutorial-window.html"
+        }
+      ],
+      "tags": [
+        "window-functions"
+      ]
+    },
+    {
+      "tier": 2,
+      "answer_format": "sql",
+      "prompt": "Table `sales(region, rep, amount)`. Rank reps **within each region** by `amount`, highest first, with ties sharing a rank and no gaps.",
+      "reference_answer": "SELECT region, rep, amount,\n       DENSE_RANK() OVER (PARTITION BY region ORDER BY amount DESC) AS rnk\nFROM sales;",
+      "rubric": [
+        "Uses DENSE_RANK",
+        "Partitions by region",
+        "Orders by amount descending"
+      ],
+      "references": [],
+      "tags": [
+        "ranking"
+      ]
+    }
+  ]
+}
