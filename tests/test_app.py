@@ -1,3 +1,5 @@
+import io
+import zipfile
 import json
 import re
 
@@ -144,6 +146,17 @@ def test_export_then_import_round_trip(client):
     assert exported.headers["content-disposition"].endswith('.json"')
     result = client.post("/import", data={"text": exported.text})
     assert re.search(r"0 added · 0 updated · \d+ unchanged", result.text)
+
+
+def test_export_all_zips_one_importable_file_per_collection(client):
+    exported = client.get("/export")
+    assert exported.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        names = archive.namelist()
+        assert len(names) == len(set(names)) >= 2 and all(n.endswith(".json") for n in names)
+        for name in names:
+            result = client.post("/import", data={"text": archive.read(name).decode()})
+            assert re.search(r"0 added · 0 updated · \d+ unchanged", result.text), name
 
 
 def test_browse_filters_by_status(client):
