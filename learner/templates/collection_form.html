@@ -75,9 +75,17 @@
 <div class="actions danger-zone">
   <a class="button secondary" href="/collections/{{ collection.id }}/export">Export JSON</a>
   <form method="post" action="/collections/{{ collection.id }}/archive"><button type="submit">{{ "Unarchive" if collection.archived else "Archive" }} collection</button></form>
+  {% if collection.archived %}
+  <form method="post" action="/collections/{{ collection.id }}/delete" class="delete-collection" data-name="{{ collection.display_name }}">
+    <button type="submit" class="bad">Delete permanently</button>
+  </form>
+  {% endif %}
 </div>
 {% endif %}
 <script type="module">
+  document.querySelectorAll(".delete-collection").forEach((form) => form.addEventListener("submit", (e) => {
+    if (!confirm(`Permanently delete “${form.dataset.name}” with all its cards and study history? This can't be undone.`)) e.preventDefault();
+  }));
   document.querySelectorAll(".delete-tier").forEach((button) => button.addEventListener("click", (e) => {
     const n = Number(button.dataset.cards);
     const question = n

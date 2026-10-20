@@ -127,6 +127,25 @@ def save_collection(
         return collection_id
 
 
+def delete_collection(conn: sqlite3.Connection, collection_id: int) -> int:
+    """Permanently delete an archived collection with its cards, analyses and attempts. Returns the card count.
+
+    Only an archived collection can be deleted, so it takes two deliberate steps.
+    """
+    collection = get_collection(conn, collection_id)
+    if collection is None:
+        raise ValueError("Collection not found")
+    if not collection.archived:
+        raise ValueError("Archive the collection before deleting it")
+    cards = "SELECT id FROM card WHERE collection_id = ?"
+    with conn:
+        conn.execute(f"DELETE FROM attempt WHERE card_id IN ({cards})", (collection_id,))
+        conn.execute(f"DELETE FROM card_analysis WHERE card_id IN ({cards})", (collection_id,))
+        count = conn.execute("DELETE FROM card WHERE collection_id = ?", (collection_id,)).rowcount
+        conn.execute("DELETE FROM collection WHERE id = ?", (collection_id,))
+    return count
+
+
 def list_groups(conn: sqlite3.Connection) -> list[str]:
     return [r[0] for r in conn.execute("SELECT DISTINCT group_name FROM collection WHERE group_name != '' ORDER BY 1")]
 
