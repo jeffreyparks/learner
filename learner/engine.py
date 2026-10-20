@@ -34,13 +34,15 @@ def outcome_for(right: bool, hints_used: int) -> str:
 @dataclass(frozen=True)
 class Progress:
     status: str
-    streak: int = 0
+    streak: float = 0
     attempts: int = 0
     recent_accuracy: float = 0.0
     last_seen: str | None = None
 
 
-def card_progress(card: Card, attempts: Sequence[Attempt], known_streak: int) -> Progress:
+def card_progress(
+    card: Card, attempts: Sequence[Attempt], known_streak: int, assisted_credit: float = 0.0
+) -> Progress:
     """`attempts` are this card's attempts in order. Only a card's first attempt in a session can raise its streak.
 
     A `revealed` attempt changes nothing itself, but it still uses up the session's first attempt:
@@ -61,6 +63,8 @@ def card_progress(card: Card, attempts: Sequence[Attempt], known_streak: int) ->
             streak = 0
         elif a.outcome == CORRECT and first_in_session:
             streak += 1
+        elif a.outcome == ASSISTED and first_in_session:
+            streak += assisted_credit
     recent = scored[-RECENT_WINDOW:]
     accuracy = sum(a.outcome != INCORRECT for a in recent) / len(recent)
     status = KNOWN if streak >= known_streak else LEARNING
@@ -68,14 +72,15 @@ def card_progress(card: Card, attempts: Sequence[Attempt], known_streak: int) ->
 
 
 def progress_map(
-    cards: Sequence[Card], attempts: Sequence[Attempt], known_streak: int, exclude_session: str | None = None
+    cards: Sequence[Card], attempts: Sequence[Attempt], known_streak: int, exclude_session: str | None = None,
+    assisted_credit: float = 0.0,
 ) -> dict[int, Progress]:
     """Progress for every card. `exclude_session` gives the state as it was when that session started."""
     by_card: dict[int, list[Attempt]] = {c.id: [] for c in cards}
     for a in sorted(attempts, key=lambda a: a.id):
         if a.card_id in by_card and a.session_id != exclude_session:
             by_card[a.card_id].append(a)
-    return {c.id: card_progress(c, by_card[c.id], known_streak) for c in cards}
+    return {c.id: card_progress(c, by_card[c.id], known_streak, assisted_credit) for c in cards}
 
 
 # --- tiers ---
@@ -193,7 +198,7 @@ def session_state(
     order: CardSequence | None = None,
 ) -> SessionState:
     """What to show next. Stateless: the session is reconstructed from its attempts every time."""
-    start = progress_map(cards, attempts, cfg.known_streak, exclude_session=session_id)
+    start = progress_map(cards, attempts, cfg.known_streak, exclude_session=session_id, assisted_credit=cfg.assisted_credit)
     plan = session_plan(cards, start, tier, cfg, order)
     active = {c.id for c in cards}
     session = [a for a in sorted(attempts, key=lambda a: a.id) if a.session_id == session_id and a.card_id in active]
@@ -236,10 +241,10 @@ class SessionSummary:
 
 
 def session_summary(
-    cards: Sequence[Card], attempts: Sequence[Attempt], session_id: str, known_streak: int
+    cards: Sequence[Card], attempts: Sequence[Attempt], session_id: str, known_streak: int, assisted_credit: float = 0.0
 ) -> SessionSummary:
-    start = progress_map(cards, attempts, known_streak, exclude_session=session_id)
-    end = progress_map(cards, attempts, known_streak)
+    start = progress_map(cards, attempts, known_streak, exclude_session=session_id, assisted_credit=assisted_credit)
+    end = progress_map(cards, attempts, known_streak, assisted_credit=assisted_credit)
     session = [a for a in attempts if a.session_id == session_id]
     wrong = sum(a.outcome == INCORRECT for a in session)
     revealed = sum(a.outcome == REVEALED for a in session)

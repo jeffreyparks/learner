@@ -197,7 +197,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         """Calculate progress and persist any new (sticky) tier unlock."""
         cards = store.list_cards(conn, collection.id)
         attempts = store.list_attempts(conn, collection.id)
-        progress = engine.progress_map(cards, attempts, cfg.known_streak)
+        progress = engine.progress_map(cards, attempts, cfg.known_streak, assisted_credit=cfg.assisted_credit)
         all_tiers = sorted(collection.tier_labels)
         unlocked = engine.unlocked_through(cards, progress, collection.max_unlocked_tier, cfg.unlock_pct, all_tiers)
         if unlocked > collection.max_unlocked_tier:
@@ -291,7 +291,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     def study_summary(request: Request, collection_id: int, tier: int, session_id: str):
         with db() as conn:
             snap = snapshot(conn, load_collection(conn, collection_id))
-        summary = engine.session_summary(snap.cards, snap.attempts, session_id, cfg.known_streak)
+        summary = engine.session_summary(snap.cards, snap.attempts, session_id, cfg.known_streak, cfg.assisted_credit)
         return page(
             request, "study_done.html", snap=snap, summary=summary,
             tier=snap.tier(tier), next_tier=snap.next_tier(tier),

@@ -101,7 +101,7 @@ Every attempt ends with exactly one outcome, whoever grades it:
 | Outcome | When | Effect on streak |
 |---|---|---|
 | `correct` | Right, no hints used | +1 (see §5.4) |
-| `assisted` | Right, but used **any** hint | unchanged |
+| `assisted` | Right, but used **any** hint | unchanged (or +`assisted_credit`, §5.7) |
 | `incorrect` | Wrong or partially right | reset to 0 |
 | `revealed` | **Show answer** instead of answering | unchanged, and not counted as right or wrong anywhere (status, accuracy, stats) |
 
@@ -131,6 +131,19 @@ Queue, in priority order, up to `session_size` (default **20**):
 2. **`learning` cards**, weakest first, judged by accuracy over their last 5 attempts.
 3. **`new` cards** in concept-graph order (§6), up to `new_per_session` (default **5**).
 4. **Refresher:** `known` cards from this tier and lower ones, **least recently seen first**, up to `refresher_pct` of the session (default **10%**). This is the only resurfacing mechanism; nothing is time-based.
+
+### 5.7 Pace
+`pace = "slow" | "medium" | "fast"` in `[study]` sets five settings at once; any of them also set in `learner.toml` wins. Unset means the plain defaults.
+
+| | slow | medium | fast |
+|---|---|---|---|
+| `unlock_pct` | 90% | 70% | 50% |
+| `known_streak` | 3 | 2 | 1 |
+| `new_per_session` | 3 | 6 | 10 |
+| `refresher_pct` | 20% | 10% | 5% |
+| `assisted_credit` | 0 | 0.5 | 0.5 |
+
+`assisted_credit` is the streak a first-in-session `assisted` answer adds (a correct one adds 1), so with `0.5` two hinted answers equal one clean one. `fast` uses a streak of 1, which gives up the "survive a break" spacing of §5.4.
 
 ### 5.6 Tier unlock & completion
 - **Unlock:** Tier N+1 unlocks when at least `unlock_pct` (default **80%**) of Tier N's active cards are `known`.
@@ -447,5 +460,6 @@ Phase 0 is usable on its own, and each later phase adds to it.
 - [ ] **Suggest key points for imported cards:** an optional AI pass after an Anki import, so grading has concrete points to check.
 - [ ] **Adaptive refresh:** after a miss, pull that card's prerequisites forward into the session. Now possible with the concept graph; worth doing once real use shows misses clustering on prerequisites (the Stats page's weakest concepts will show it).
 - [ ] **Per-collection setting overrides**, if global settings ever prove too coarse.
+- [ ] **Pace picker in the UI** (a dashboard dropdown, per-collection override). The `pace` setting itself is done (§5.7). Original note: **Learning pace presets.** One simple setting instead of several knobs: **Slow** ("I want to take my time"), **Medium** ("I feel confident, move along"), **Fast** ("super fast review"). Each preset bundles `unlock_pct`, `known_streak`, `new_per_session`, `refresher_pct`, whether `assisted` answers count as a half step, and a minimum share of each session for new cards. Could be global first, then per-collection. Individual `learner.toml` values would still override the preset. Prompted by repeating cards while chasing a near-perfect score before a tier unlocks.
 - [ ] **Additional LLM providers** (OpenAI, local via Ollama, …).
 - [ ] **Multi-part cards.**

@@ -12,6 +12,15 @@ class ConfigError(ValueError):
     pass
 
 
+# One word instead of several knobs (DESIGN.md §5.7). Each preset sets these study settings;
+# anything also set explicitly in learner.toml wins over the preset.
+PACES: dict[str, dict[str, float | int]] = {
+    "slow": dict(unlock_pct=0.90, known_streak=3, new_per_session=3, refresher_pct=0.20, assisted_credit=0.0),
+    "medium": dict(unlock_pct=0.70, known_streak=2, new_per_session=6, refresher_pct=0.10, assisted_credit=0.5),
+    "fast": dict(unlock_pct=0.50, known_streak=1, new_per_session=10, refresher_pct=0.05, assisted_credit=0.5),
+}
+
+
 @dataclass(frozen=True)
 class Config:
     # [app]
@@ -20,6 +29,8 @@ class Config:
     open_browser: bool = True
     max_image_mb: float = 4.0  # per image; the API also limits image size, so keep this modest
     # [study]
+    pace: str = ""  # "" (the plain defaults below) | "slow" | "medium" | "fast"
+    assisted_credit: float = 0.0  # streak credit for a right answer after a hint (0 = none, 0.5 = half a step)
     session_size: int = 20
     new_per_session: int = 5
     refresher_pct: float = 0.10
@@ -45,7 +56,9 @@ class Config:
         for name in ("new_per_session", "requeue_gap"):
             if getattr(self, name) < 0:
                 raise ConfigError(f"{name} must not be negative")
-        for name in ("refresher_pct", "unlock_pct"):
+        if self.pace and self.pace not in PACES:
+            raise ConfigError('pace must be "slow", "medium" or "fast"')
+        for name in ("refresher_pct", "unlock_pct", "assisted_credit"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ConfigError(f"{name} must be between 0 and 1")
         if not 0 < self.max_image_mb <= 20:
@@ -60,6 +73,8 @@ class Config:
 SECTIONS = {
     "app": ("db_path", "port", "open_browser", "max_image_mb"),
     "study": (
+        "pace",
+        "assisted_credit",
         "session_size",
         "new_per_session",
         "refresher_pct",
@@ -118,4 +133,7 @@ def load(path: str | Path | None = None) -> Config:
             if not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
                 raise ConfigError(f"{path}: {section}.{key} should be a {expected.__name__}")
             values[key] = value
-    return replace(Config(), **values)
+    pace = values.get("pace", "")
+    if pace and pace not in PACES:
+        raise ConfigError(f'{path}: study.pace must be "slow", "medium" or "fast"')
+    return replace(Config(), **{**PACES.get(pace, {}), **values})
