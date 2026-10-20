@@ -38,6 +38,7 @@ class Config:
     unlock_pct: float = 0.80
     requeue_gap: int = 3
     max_attempts_per_card: int = 3
+    pinned: tuple[str, ...] = ()  # pace settings set explicitly in learner.toml; a pace choice never overrides these
     # [llm]
     provider: str = "claude"  # "claude" | "fake" (canned answers, for demos and tests) | "off"
     grade_model: str = "claude-haiku-5-5"
@@ -68,6 +69,19 @@ class Config:
         for name in ("effort", "sequence_effort", "draft_effort"):
             if getattr(self, name) not in ("low", "medium", "high", "xhigh", "max"):
                 raise ConfigError(f"{name} must be low, medium, high, xhigh or max")
+
+
+PACE_KEYS = tuple(PACES["medium"])
+
+
+def with_pace(cfg: Config, pace: str) -> Config:
+    """`cfg` with a pace applied ("" = the plain defaults). Settings pinned in learner.toml keep their values."""
+    if pace and pace not in PACES:
+        raise ConfigError('pace must be "slow", "medium" or "fast"')
+    plain = Config()
+    preset = PACES.get(pace, {})
+    values = {k: preset.get(k, getattr(plain, k)) for k in PACE_KEYS if k not in cfg.pinned}
+    return replace(cfg, pace=pace, **values)
 
 
 SECTIONS = {
@@ -136,4 +150,5 @@ def load(path: str | Path | None = None) -> Config:
     pace = values.get("pace", "")
     if pace and pace not in PACES:
         raise ConfigError(f'{path}: study.pace must be "slow", "medium" or "fast"')
-    return replace(Config(), **{**PACES.get(pace, {}), **values})
+    pinned = tuple(k for k in values if k in PACE_KEYS)
+    return replace(Config(), **{**PACES.get(pace, {}), **values}, pinned=pinned)
