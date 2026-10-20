@@ -49,7 +49,7 @@
 <p class="muted">No collections yet. <a href="/collections/new">Create one</a> or <a href="/import">import a file</a>.</p>
 {% endfor %}
 
-<p class="muted small">A card is <em>known</em> after {{ cfg.known_streak }} correct answers in separate sessions. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.</p>
+<p class="muted small">A card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions{% if cfg.pace %} ({{ cfg.pace }} pace){% endif %}. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.</p>
 
 {% if archived %}
 <details class="archived-list">

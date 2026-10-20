@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head">
   <h1>{{ "Edit card" if card else "New card" }}</h1>
-  {% if card %}<span>{{ status_badge("archived" if card.archived else progress.status) }}{% if progress and progress.attempts %} <span class="muted small">streak {{ progress.streak }} · {{ progress.attempts }} attempts</span>{% endif %}</span>{% endif %}
+  {% if card %}<span>{{ status_badge("archived" if card.archived else progress.status) }}{% if progress and progress.attempts %} <span class="muted small">streak {{ '%g' % progress.streak }} · {{ progress.attempts }} attempts</span>{% endif %}</span>{% endif %}
 </div>
 {% if request.query_params.get("saved") %}<p class="notice">Saved.</p>{% endif %}
 {% if request.query_params.get("moved_tier") %}<p class="notice">Unarchived. Its tier had been deleted, so it's now in the last tier.</p>{% endif %}

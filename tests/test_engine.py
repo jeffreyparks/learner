@@ -165,3 +165,13 @@ def test_new_cards_follow_the_concept_order():
     order = sequencer.build(cards, analyses)
     assert engine.session_plan(cards, start, 1, cfg) == [1, 2]  # without an order: creation order
     assert engine.session_plan(cards, start, 1, cfg, order) == [3, 2]  # card 1 waits for card 3
+
+
+def test_assisted_credit_builds_half_a_step():
+    c = card(1)
+    attempts = [attempt(1, "s1", "assisted"), attempt(1, "s2", "assisted")]
+    assert engine.card_progress(c, attempts, 2).status == engine.LEARNING
+    p = engine.card_progress(c, attempts, 2, assisted_credit=0.5)
+    assert p.streak == 1 and p.status == engine.LEARNING
+    p = engine.card_progress(c, attempts + [attempt(1, "s3", "assisted"), attempt(1, "s4", "assisted")], 2, assisted_credit=0.5)
+    assert p.status == engine.KNOWN

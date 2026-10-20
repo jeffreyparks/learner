@@ -25,7 +25,7 @@
     <input type="hidden" name="llm_feedback" value="">
 
     <section id="hints" class="hints" hidden>
-      <h4>Hints <span class="muted small">(a right answer after a hint counts, but doesn't build your streak)</span></h4>
+      <h4>Hints <span class="muted small">(a right answer after a hint counts, but {{ 'earns only half a step toward' if cfg.assisted_credit else "doesn't build" }} your streak)</span></h4>
       <ol id="hint-list"></ol>
     </section>
 
