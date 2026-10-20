@@ -603,6 +603,16 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             store.set_collection_archived(conn, collection_id, not c.archived)
         return redirect(f"/collections/{collection_id}")
 
+    @app.post("/collections/{collection_id:int}/delete")
+    def collection_delete(collection_id: int):
+        with db() as conn:
+            load_collection(conn, collection_id)
+            try:
+                store.delete_collection(conn, collection_id)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc))
+        return redirect("/")
+
     @app.get("/collections/{collection_id:int}/export")
     def collection_export(collection_id: int):
         with db() as conn:

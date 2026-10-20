@@ -146,6 +146,25 @@ def test_export_then_import_round_trip(client):
     assert re.search(r"0 added · 0 updated · \d+ unchanged", result.text)
 
 
+def test_delete_collection_needs_archiving_first(client, tmp_path):
+    start_session(client)  # gives collection 1 some study history
+    assert client.post("/collections/1/delete", follow_redirects=False).status_code == 409
+    assert client.get("/collections/1").status_code == 200
+    assert "Delete permanently" not in client.get("/collections/1").text
+
+    client.post("/collections/1/archive")
+    assert "Delete permanently" in client.get("/collections/1").text
+    assert client.post("/collections/1/delete", follow_redirects=False).status_code == 303
+    assert client.get("/collections/1").status_code == 404
+    conn = store.connect(tmp_path / "app.db")
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM card WHERE collection_id = 1").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM collection").fetchone()[0] >= 1  # others untouched
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        conn.close()
+
+
 def test_browse_filters_by_status(client):
     html = client.get("/browse?status=new").text
     assert "new</span>" in html and "known</span>" not in html
