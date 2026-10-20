@@ -175,3 +175,21 @@ def test_assisted_credit_builds_half_a_step():
     assert p.streak == 1 and p.status == engine.LEARNING
     p = engine.card_progress(c, attempts + [attempt(1, "s3", "assisted"), attempt(1, "s4", "assisted")], 2, assisted_credit=0.5)
     assert p.status == engine.KNOWN
+
+
+def test_right_retry_after_a_miss_earns_assisted_credit_once_per_session():
+    c = card(1)
+    miss_then_retry = [attempt(1, "s1", "incorrect"), attempt(1, "s1", "correct"), attempt(1, "s1", "correct")]
+    assert engine.card_progress(c, miss_then_retry, 2).streak == 0  # no credit configured (slow)
+    p = engine.card_progress(c, miss_then_retry, 2, assisted_credit=0.5)
+    assert p.streak == 0.5  # credited once, not twice
+    p = engine.card_progress(c, miss_then_retry + [attempt(1, "s2", "correct"), attempt(1, "s3", "correct")], 2, assisted_credit=0.5)
+    assert p.status == engine.KNOWN  # 0.5 + 1 + 1
+
+
+def test_retry_credit_needs_a_miss_not_a_peek():
+    c = card(1)
+    peek_then_right = [attempt(1, "s1", "revealed"), attempt(1, "s1", "correct")]
+    assert engine.card_progress(c, peek_then_right, 2, assisted_credit=0.5).streak == 0
+    first_try_then_again = [attempt(1, "s1", "correct"), attempt(1, "s1", "correct")]
+    assert engine.card_progress(c, first_try_then_again, 2, assisted_credit=0.5).streak == 1
