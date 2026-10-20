@@ -615,6 +615,9 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
                 raise HTTPException(409, str(exc))
         return redirect("/")
 
+    def export_filename(name: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "collection"
+
     @app.get("/collections/{collection_id:int}/export")
     def collection_export(collection_id: int):
         with db() as conn:
