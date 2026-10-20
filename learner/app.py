@@ -9,6 +9,8 @@ import secrets
 import sqlite3
 import threading
 import webbrowser
+import zipfile
+from io import BytesIO
 from urllib.parse import quote, urlsplit
 from contextlib import closing
 from dataclasses import dataclass
@@ -618,8 +620,24 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         with db() as conn:
             c = load_collection(conn, collection_id)
             data = store.export_collection(conn, collection_id)
-        filename = re.sub(r"[^a-z0-9]+", "-", c.name.lower()).strip("-") or "collection"
-        return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{filename}.json"'})
+        return JSONResponse(data, headers={"Content-Disposition": f'attachment; filename="{export_filename(c.name)}.json"'})
+
+    @app.get("/export")
+    def export_all():
+        """Every collection (archived too) as its own import-ready JSON file, in one zip."""
+        buffer = BytesIO()
+        used: set[str] = set()
+        with db() as conn, zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for c in store.list_collections(conn, include_archived=True):
+                base = export_filename(f"{c.group} {c.name}" if c.group else c.name)
+                name, n = base, 2
+                while name in used:
+                    name, n = f"{base}-{n}", n + 1
+                used.add(name)
+                data = store.export_collection(conn, c.id)
+                archive.writestr(f"{name}.json", json.dumps(data, indent=2, ensure_ascii=False))
+        return Response(buffer.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": 'attachment; filename="learner-export.zip"'})
 
     # --- authoring assistant: draft cards from your notes ---
 

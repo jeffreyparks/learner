@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jeffreyparks/learner/skills/learner-cards/schema.json",
+  "title": "Learner collection",
+  "description": "One Learner collection with its cards, as accepted by Learner's JSON import.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["collection", "cards"],
+  "properties": {
+    "collection": {"type": "string", "minLength": 1, "pattern": "\\S", "description": "The subject; re-importing with the same name and group updates it."},
+    "group": {"type": "string", "description": "Optional dashboard group, e.g. \"Data science\"."},
+    "sql_dialect": {"enum": ["mysql", "postgres", "sqlite", "snowflake", "bigquery", "tsql", "duckdb"], "default": "mysql"},
+    "tier_labels": {
+      "type": "object",
+      "description": "Tier number (as a string) to its label.",
+      "propertyNames": {"pattern": "^[1-9][0-9]*$"},
+      "additionalProperties": {"type": "string"}
+    },
+    "cards": {"type": "array", "items": {"$ref": "#/$defs/card"}},
+    "media": {
+      "type": "object",
+      "description": "Images the cards reference as ![alt](/media/<sha256>), keyed by the hex SHA-256 of the image bytes.",
+      "propertyNames": {"pattern": "^[0-9a-f]{64}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mime", "data"],
+        "properties": {
+          "mime": {"enum": ["image/jpeg", "image/png", "image/gif", "image/webp"]},
+          "data": {"type": "string", "contentEncoding": "base64"},
+          "filename": {"type": "string"},
+          "alt": {"type": "string"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier", "prompt", "reference_answer"],
+      "properties": {
+        "tier": {"type": "integer", "minimum": 1},
+        "answer_format": {"enum": ["text", "python", "sql"], "default": "text"},
+        "prompt": {"type": "string", "minLength": 1, "pattern": "\\S", "description": "Markdown."},
+        "reference_answer": {"type": "string", "minLength": 1, "pattern": "\\S", "description": "Markdown; bare code for python and sql cards."},
+        "rubric": {"type": "array", "items": {"type": "string"}, "description": "Two to four key points the grader checks."},
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "url"],
+            "properties": {
+              "title": {"type": "string", "minLength": 1, "pattern": "\\S"},
+              "url": {"type": "string", "pattern": "^https?://[^ ]*$"}
+            }
+          }
+        },
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "id": {"type": "integer", "description": "Only in files exported from Learner; omit when creating cards."},
+        "archived": {"type": "boolean", "description": "Only in files exported from Learner; omit when creating cards."}
+      }
+    }
+  }
+}
