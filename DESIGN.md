@@ -135,7 +135,7 @@ Queue, in priority order, up to `session_size` (default **20**):
 ### 5.7 Pace
 `pace = "slow" | "medium" | "fast"` in `[study]` sets five settings at once; any of them also set in `learner.toml` wins. Unset means the plain defaults.
 
-The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choice is saved in the `setting` table and beats `pace` in `learner.toml`, but never the individual values pinned in `learner.toml`. It applies to every collection.
+The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choice is saved in the `setting` table and beats `pace` in `learner.toml`, but never the individual values pinned in `learner.toml`. It applies to every collection unless one sets its own: the collection's edit page has a **Pace** field ("Same as everywhere" by default), stored in the collection's `pace` column. A collection's pace also respects values pinned in `learner.toml`, and isn't included in JSON export.
 
 | | slow | medium | fast |
 |---|---|---|---|
@@ -462,6 +462,5 @@ Phase 0 is usable on its own, and each later phase adds to it.
 - [ ] **Suggest key points for imported cards:** an optional AI pass after an Anki import, so grading has concrete points to check.
 - [ ] **Adaptive refresh:** after a miss, pull that card's prerequisites forward into the session. Now possible with the concept graph; worth doing once real use shows misses clustering on prerequisites (the Stats page's weakest concepts will show it).
 - [ ] **Per-collection setting overrides**, if global settings ever prove too coarse.
-- [ ] **Per-collection pace override**, if one global pace proves too coarse (the global dashboard picker is done, §5.7).
 - [ ] **Additional LLM providers** (OpenAI, local via Ollama, …).
 - [ ] **Multi-part cards.**
