@@ -192,3 +192,4 @@ Why the design in [DESIGN.md](DESIGN.md) is the way it is. Numbered entries are 
 | 99 | Card form tier = dropdown of real tiers + "new tier"; bulk "Move selected to" on the Cards page | Card-level moves can't create unlabelled tiers. |
 | 100 | No drag and drop | Tiers are few (buttons suffice); bulk moves are faster with checkboxes; less JavaScript to maintain. |
 | 101 | "Combine or re-tier" renamed "Combine collections"; single-collection hand edits live in the Tiers panel | Avoids two places doing the same job. |
+| 102 | "Ask the tutor" chat on the study screen; stateless server, `ask_model` defaults to Sonnet; asking before the answer is shown counts as a hint | Hints can't answer "explain this"; the chat must not become a way to dodge the score, and nothing about it needs storing. |

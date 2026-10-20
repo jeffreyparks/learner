@@ -124,6 +124,27 @@ def test_hint_endpoint_passes_level_and_earlier_hints(tmp_path):
     assert task == "hint" and "1. first hint" in user and "(nothing written yet)" in user
 
 
+def test_ask_endpoint_renders_markdown_and_escapes_html(tmp_path):
+    provider = FakeProvider({"ask": {"reply": "Use **GROUP BY**. <script>x</script>"}})
+    client = make_client(tmp_path, provider)
+    page = client.get(start_session(client)).text
+    assert 'id="tutor"' in page
+    card_id = card_id_on(page)
+    body = {"card_id": card_id, "answer": "", "answer_shown": True, "messages": [{"role": "learner", "text": "why?"}]}
+    reply = client.post("/ask", json=body).json()
+    assert "<strong>GROUP BY</strong>" in reply["html"] and "<script>" not in reply["html"]
+    assert provider.calls[-1][0] == "ask" and "answer_shown" in provider.calls[-1][1]
+    assert "error" in client.post("/ask", json=body | {"messages": []}).json()
+    assert client.post("/ask", json=body | {"messages": [{"role": "system", "text": "x"}]}).status_code == 422
+
+
+def test_ask_is_unavailable_without_an_llm(tmp_path):
+    client = make_client(tmp_path)
+    assert 'id="tutor"' not in client.get(start_session(client)).text
+    body = {"card_id": 1, "messages": [{"role": "learner", "text": "hi"}]}
+    assert "error" in client.post("/ask", json=body).json()
+
+
 def test_locked_tier_warns_before_starting(client):
     response = client.get("/study/1/2")
     assert "isn't unlocked yet" in response.text

@@ -69,6 +69,19 @@
     </section>
   </form>
 
+  {% if ai_grading %}
+  <details id="tutor" class="tutor">
+    <summary>Ask the tutor <kbd>Alt+T</kbd></summary>
+    <p class="muted small" id="tutor-note">Ask for an explanation, an example, or a short tutorial on anything in this card. The tutor won't give the answer away until you've submitted or shown it, and asking before then counts as a hint.</p>
+    <div id="tutor-log" class="tutor-log" aria-live="polite"></div>
+    <div class="tutor-input">
+      <textarea id="tutor-text" rows="2" placeholder="e.g. Can you walk me through how a window function works?" spellcheck="true"></textarea>
+      <button type="button" id="tutor-send">Ask <kbd>Ctrl+Enter</kbd></button>
+    </div>
+    <span id="tutor-status" class="muted small"></span>
+  </details>
+  {% endif %}
+
   <p class="muted small">
     <a href="/study/{{ snap.collection.id }}/{{ tier }}/{{ session_id }}/summary">End session</a>
     · {% if ai_grading %}Graded by AI{% else %}No AI grader set up: you mark your own answers (<a href="/cards/draft">how to set it up</a>){% endif %}

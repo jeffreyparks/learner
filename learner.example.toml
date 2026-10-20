@@ -27,6 +27,7 @@ max_attempts_per_card = 3   # per session, so one hard card can't take over a se
 provider = "claude"                  # "claude", "fake" (canned answers, for trying the flow), or "off"
 grade_model = "claude-haiku-5-5"     # grades every answer, so it should be fast
 hint_model = "claude-haiku-5-5"
+ask_model = "claude-sonnet-5-5"      # the "Ask the tutor" chat on the study screen
 sequence_model = "claude-sonnet-5-5" # orders cards; runs rarely
 draft_model = "claude-sonnet-5-5"    # drafts new cards from your notes
 effort = "low"                       # effort for grading and hints: low, medium, high, xhigh, max

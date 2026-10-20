@@ -43,6 +43,7 @@ class Config:
     provider: str = "claude"  # "claude" | "fake" (canned answers, for demos and tests) | "off"
     grade_model: str = "claude-haiku-5-5"
     hint_model: str = "claude-haiku-5-5"
+    ask_model: str = "claude-sonnet-5-5"  # the "Ask the tutor" chat: on demand, so quality over speed
     sequence_model: str = "claude-sonnet-5-5"
     draft_model: str = "claude-sonnet-5-5"  # drafts new cards from your notes
     effort: str = "low"  # for grading and hints, which run on every card
@@ -98,7 +99,7 @@ SECTIONS = {
         "max_attempts_per_card",
     ),
     "llm": (
-        "provider", "grade_model", "hint_model", "sequence_model", "draft_model",
+        "provider", "grade_model", "hint_model", "ask_model", "sequence_model", "draft_model",
         "effort", "sequence_effort", "draft_effort", "timeout",
     ),
 }

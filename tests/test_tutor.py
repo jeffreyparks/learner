@@ -165,3 +165,26 @@ def test_claude_drafting_uses_the_draft_model():
     provider = ClaudeProvider(Config(provider="claude", draft_model="claude-opus-5-5", draft_effort="high"), client=client)
     provider.complete("draft", "s", "u", {})
     assert calls["model"] == "claude-opus-5-5" and calls["output_config"]["effort"] == "high"
+
+
+def test_ask_sends_phase_and_conversation_and_limits_it():
+    provider = FakeProvider()
+    chat = [("learner", "what is a CTE?"), ("tutor", "A named subquery."), ("learner", "show me one")]
+    reply = tutor.ask(provider, card(), "SELECT 1", chat, answer_shown=False, dialect="postgres")
+    assert "Fake tutor" in reply
+    _, user = provider.calls[-1]
+    assert "<phase>attempting</phase>" in user and 'visible_to_learner="no"' in user
+    assert "<learner>\nwhat is a CTE?\n</learner>" in user and "<tutor>\nA named subquery.\n</tutor>" in user
+    tutor.ask(provider, card(), "", chat, answer_shown=True, dialect="postgres")
+    assert "<phase>answer_shown</phase>" in provider.calls[-1][1]
+    many = [("learner", f"q{i}") for i in range(30)]
+    tutor.ask(provider, card(), "", many, answer_shown=True, dialect="postgres")
+    user = provider.calls[-1][1]
+    assert "q29" in user and "q17" not in user and "q18" in user
+
+
+def test_ask_needs_a_learner_question_last():
+    with pytest.raises(LLMError):
+        tutor.ask(FakeProvider(), card(), "", [("tutor", "hi")], False, "postgres")
+    with pytest.raises(LLMError):
+        tutor.ask(FakeProvider({"ask": {"reply": "  "}}), card(), "", [("learner", "hi")], False, "postgres")

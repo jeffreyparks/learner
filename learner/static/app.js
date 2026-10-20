@@ -7,7 +7,7 @@ const isTyping = () => {
 };
 
 // Study screen: write → submit → reference appears at once, the LLM's verdict follows → accept or override.
-// Keys: Ctrl/Cmd+Enter (or Space outside the answer box) submit, Alt+H hint, Alt+A show answer,
+// Keys: Ctrl/Cmd+Enter (or Space outside the answer box) submit, Alt+H hint, Alt+A show answer, Alt+T ask the tutor,
 // then Enter accepts the verdict, 1 marks right, 2 marks wrong (after Show answer, Enter moves on).
 function initStudy(study) {
   const { cardId, format, dialect } = study.dataset;
@@ -123,13 +123,66 @@ function initStudy(study) {
       return;
     }
     hints.push(reply.hint);
-    form.elements.max_hint_level.value = hints.length;
+    form.elements.max_hint_level.value = Math.max(hints.length, Number(form.elements.max_hint_level.value));
     document.getElementById("hints").hidden = false;
     document.getElementById("hint-list").append(el("li", "", reply.hint));
     hintButton.disabled = hints.length >= maxHints;
     if (hintButton.disabled) hintStatus.textContent = "That's the last hint.";
     (editor || input).focus();
   }
+
+  // "Ask the tutor": a small chat about this card. The server keeps no chat; we send it all each time.
+  // Asking before the answer is on screen counts as a hint, since the tutor may point you in a direction.
+  const tutorBox = document.getElementById("tutor");
+  const tutorText = document.getElementById("tutor-text");
+  const tutorLog = document.getElementById("tutor-log");
+  const tutorStatus = document.getElementById("tutor-status");
+  const tutorSend = document.getElementById("tutor-send");
+  const chat = [];
+
+  async function askTutor() {
+    const text = tutorText.value.trim();
+    if (!text || tutorSend.disabled) return;
+    chat.push({ role: "learner", text });
+    tutorLog.append(el("p", "tutor-msg learner", text));
+    tutorText.value = "";
+    tutorSend.disabled = true;
+    tutorStatus.textContent = "Thinking…";
+    if (!submitted && Number(form.elements.max_hint_level.value) < 1) form.elements.max_hint_level.value = 1;
+    const reply = await post("/ask", { card_id: Number(cardId), answer: answerText(), answer_shown: submitted, messages: chat });
+    tutorSend.disabled = false;
+    if (reply.error) {
+      chat.pop(); // let them resend
+      tutorLog.lastChild.remove();
+      tutorText.value = text;
+      tutorStatus.textContent = `The tutor couldn't answer (${reply.error})`;
+      return;
+    }
+    tutorStatus.textContent = "";
+    chat.push({ role: "tutor", text: reply.reply });
+    const bubble = el("div", "tutor-msg tutor markdown");
+    bubble.innerHTML = reply.html; // rendered server-side from Markdown with raw HTML disabled
+    tutorLog.append(bubble);
+    bubble.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    tutorText.focus();
+  }
+
+  function openTutor() {
+    if (!tutorBox) return;
+    tutorBox.open = true;
+    tutorText.focus();
+  }
+
+  tutorSend?.addEventListener("click", askTutor);
+  tutorText?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      askTutor();
+    }
+  });
+  tutorBox?.addEventListener("toggle", () => {
+    if (tutorBox.open) tutorText.focus();
+  });
 
   let marked = false;
   function mark(buttonId) {
@@ -151,6 +204,12 @@ function initStudy(study) {
   });
 
   document.addEventListener("keydown", (e) => {
+    if (tutorBox?.contains(e.target)) return; // typing in the chat: don't treat 1, 2 or Enter as grading keys
+    if (e.altKey && e.code === "KeyT" && tutorBox) {
+      e.preventDefault();
+      openTutor();
+      return;
+    }
     if (!submitted) {
       if ((e.key === "Enter" && (e.ctrlKey || e.metaKey)) || (e.key === " " && !isTyping())) {
         e.preventDefault();
