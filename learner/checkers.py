@@ -7,6 +7,7 @@ static/editor.js). Checkers report syntax problems only; they never decide wheth
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 from collections.abc import Callable
@@ -64,6 +65,9 @@ def check_python(code: str, dialect: str | None = None) -> list[Diagnostic]:
 
 
 # --- SQL: sqlglot ---
+
+# Falling back to a generic Command parse (e.g. MySQL-only DDL) still succeeds; don't spam the terminal.
+logging.getLogger("sqlglot").setLevel(logging.ERROR)
 
 _TOKEN_REPR = re.compile(r"<Token token_type: [^,]+, text: (.*?), line: \d+.*?>")
 
