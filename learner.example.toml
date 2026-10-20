@@ -14,7 +14,7 @@ pace = ""                   # "slow", "medium" or "fast": one word that sets the
                             #   slow:   unlock 90%, 3 sessions to know, 3 new/session, 20% refreshers, hints earn nothing
                             #   medium: unlock 70%, 2 sessions to know, 6 new/session, 10% refreshers, hints earn half a step
                             #   fast:   unlock 50%, 1 session to know,  10 new/session, 5% refreshers, hints earn half a step
-assisted_credit = 0.0       # streak credit for a right answer after a hint (0.5 = half a step)
+assisted_credit = 0.0       # streak credit for a right answer after a hint, or a right retry after a miss (0.5 = half a step)
 session_size = 20           # cards planned per session (missed cards that come back are extra)
 new_per_session = 5         # new cards introduced per session
 refresher_pct = 0.10        # share of a session spent on known cards

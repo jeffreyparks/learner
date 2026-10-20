@@ -119,7 +119,7 @@ Calculated from the card's attempts since its last `progress_reset_at`:
 A wrong answer on a `known` card resets the streak, so the card drops back to `learning`.
 
 ### 5.4 One step forward per session
-**Only a card's first attempt in a session can raise its streak.** Later attempts in the same session (misses that come back, refreshers) can still reset the streak if wrong, but they never raise it.
+**Only a card's first attempt in a session can raise its streak.** Later attempts in the same session (misses that come back, refreshers) can still reset the streak if wrong, and they don't raise it, with one exception: a `correct` answer after a miss in the same session adds `assisted_credit` (once per session), so a recovered card isn't a wasted session.
 
 So "2 in a row" means right in **two separate sessions**. There's no calendar, but a card has to survive a break before it's `known`. Short-term memory alone doesn't count.
 
@@ -145,7 +145,7 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
 | `refresher_pct` | 20% | 10% | 5% |
 | `assisted_credit` | 0 | 0.5 | 0.5 |
 
-`assisted_credit` is the streak a first-in-session `assisted` answer adds (a correct one adds 1), so with `0.5` two hinted answers equal one clean one. `fast` uses a streak of 1, which gives up the "survive a break" spacing of §5.4.
+`assisted_credit` is the streak a first-in-session `assisted` answer adds, and also what a right retry after a miss adds (a clean first-try answer adds 1), so with `0.5` two hinted answers equal one clean one. `fast` uses a streak of 1, which gives up the "survive a break" spacing of §5.4.
 
 ### 5.6 Tier unlock & completion
 - **Unlock:** Tier N+1 unlocks when at least `unlock_pct` (default **80%**) of Tier N's active cards are `known`.

@@ -43,7 +43,8 @@ class Progress:
 def card_progress(
     card: Card, attempts: Sequence[Attempt], known_streak: int, assisted_credit: float = 0.0
 ) -> Progress:
-    """`attempts` are this card's attempts in order. Only a card's first attempt in a session can raise its streak.
+    """`attempts` are this card's attempts in order. Only a card's first attempt in a session can raise its streak,
+    except that a right answer after a miss in the same session earns `assisted_credit` once per session.
 
     A `revealed` attempt changes nothing itself, but it still uses up the session's first attempt:
     answering right after peeking can't raise the streak.
@@ -54,6 +55,8 @@ def card_progress(
         return Progress(NEW)
     streak = 0
     sessions_seen: set[str] = set()
+    missed: set[str] = set()  # sessions where this card was missed
+    retry_credited: set[str] = set()
     for a in counted:
         first_in_session = a.session_id not in sessions_seen
         sessions_seen.add(a.session_id)
@@ -61,8 +64,12 @@ def card_progress(
             continue
         if a.outcome == INCORRECT:
             streak = 0
+            missed.add(a.session_id)
         elif a.outcome == CORRECT and first_in_session:
             streak += 1
+        elif a.outcome == CORRECT and a.session_id in missed and a.session_id not in retry_credited:
+            retry_credited.add(a.session_id)
+            streak += assisted_credit
         elif a.outcome == ASSISTED and first_in_session:
             streak += assisted_credit
     recent = scored[-RECENT_WINDOW:]
