@@ -15,6 +15,13 @@
   <datalist id="group-names">{% for g in groups %}<option value="{{ g }}">{% endfor %}</datalist>
   <label>SQL dialect <span class="hint">Used to check SQL answers</span>
     <select name="sql_dialect">{% for d in SQL_DIALECTS %}<option {% if form.sql_dialect == d %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+  <label>Pace <span class="hint">How strictly this collection advances. “Same as everywhere” follows the dashboard’s pace.</span>
+    <select name="pace">
+      <option value="" {% if not form.pace %}selected{% endif %}>Same as everywhere</option>
+      <option value="slow" {% if form.pace == "slow" %}selected{% endif %}>Slow: take my time</option>
+      <option value="medium" {% if form.pace == "medium" %}selected{% endif %}>Medium: I feel confident</option>
+      <option value="fast" {% if form.pace == "fast" %}selected{% endif %}>Fast: super quick review</option>
+    </select></label>
   {% if not collection %}
   <label>Tiers <span class="hint">One name per line, easiest first. You can change them later.</span>
     <textarea name="tiers" rows="4">{{ form.tiers or '' }}</textarea></label>

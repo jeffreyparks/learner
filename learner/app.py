@@ -80,6 +80,7 @@ class Snapshot:
     progress: dict[int, engine.Progress]
     tiers: list[engine.TierSummary]
     order: sequencer.CardSequence
+    cfg: Config  # the settings in force for this collection (its own pace, else the global one)
 
     def tier(self, tier: int) -> engine.TierSummary | None:
         return next((t for t in self.tiers if t.tier == tier), None)
@@ -190,7 +191,12 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     def db():
         return closing(store.connect(db_path))
 
+    def global_cfg() -> Config:
+        return cfg
+
     def page(request: Request, name: str, **context):
+        if "snap" in context:  # a collection's pages show that collection's settings
+            context.setdefault("cfg", context["snap"].cfg)
         return templates.TemplateResponse(request, name, context)
 
     def redirect(url: str) -> RedirectResponse:
@@ -198,6 +204,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
 
     def snapshot(conn: sqlite3.Connection, collection: Collection) -> Snapshot:
         """Calculate progress and persist any new (sticky) tier unlock."""
+        cfg = config_module.with_pace(global_cfg(), collection.pace) if collection.pace else global_cfg()
         cards = store.list_cards(conn, collection.id)
         attempts = store.list_attempts(conn, collection.id)
         progress = engine.progress_map(cards, attempts, cfg.known_streak, assisted_credit=cfg.assisted_credit)
@@ -207,7 +214,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             store.raise_unlocked_tier(conn, collection.id, unlocked)
         order = sequencer.build(cards, store.list_analyses(conn, collection.id))
         summaries = engine.tier_summaries(cards, progress, unlocked, all_tiers)
-        return Snapshot(collection, cards, attempts, progress, summaries, order)
+        return Snapshot(collection, cards, attempts, progress, summaries, order, cfg)
 
     def load_collection(conn, collection_id: int) -> Collection:
         collection = store.get_collection(conn, collection_id)
@@ -252,7 +259,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     def study_card(request: Request, collection_id: int, tier: int, session_id: str):
         with db() as conn:
             snap = snapshot(conn, load_collection(conn, collection_id))
-        state = engine.session_state(snap.cards, snap.attempts, session_id, tier, cfg, snap.order)
+        state = engine.session_state(snap.cards, snap.attempts, session_id, tier, snap.cfg, snap.order)
         if state.next_card_id is None:
             return redirect(f"/study/{collection_id}/{tier}/{session_id}/summary")
         card = next(c for c in snap.cards if c.id == state.next_card_id)
@@ -275,7 +282,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             if card.collection_id != collection_id:
                 raise HTTPException(400, "Card is not in this collection")
             snap = snapshot(conn, load_collection(conn, collection_id))
-            if engine.session_state(snap.cards, snap.attempts, session_id, tier, cfg, snap.order).next_card_id != card.id:
+            if engine.session_state(snap.cards, snap.attempts, session_id, tier, snap.cfg, snap.order).next_card_id != card.id:
                 # Not the card this session is showing: a repeat submit. Don't record it twice.
                 return redirect(f"/study/{collection_id}/{tier}/{session_id}")
             store.add_attempt(
@@ -294,7 +301,7 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     def study_summary(request: Request, collection_id: int, tier: int, session_id: str):
         with db() as conn:
             snap = snapshot(conn, load_collection(conn, collection_id))
-        summary = engine.session_summary(snap.cards, snap.attempts, session_id, cfg.known_streak, cfg.assisted_credit)
+        summary = engine.session_summary(snap.cards, snap.attempts, session_id, snap.cfg.known_streak, snap.cfg.assisted_credit)
         return page(
             request, "study_done.html", snap=snap, summary=summary,
             tier=snap.tier(tier), next_tier=snap.next_tier(tier),
@@ -539,7 +546,8 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
     def collection_edit(request: Request, collection_id: int):
         with db() as conn:
             c = load_collection(conn, collection_id)
-        return collection_page(request, {"name": c.name, "group": c.group, "sql_dialect": c.sql_dialect}, collection=c)
+        return collection_page(request, {"name": c.name, "group": c.group, "sql_dialect": c.sql_dialect, "pace": c.pace},
+                               collection=c)
 
     async def save_collection_form(request: Request, collection_id: int | None):
         form = dict(await request.form())
@@ -551,8 +559,12 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
                     i: line for i, line in enumerate(_lines(form.get("tiers", "")), start=1)}
                 data = CollectionIn(collection=form.get("name", ""), group=form.get("group", ""),
                                     sql_dialect=form.get("sql_dialect", "mysql"), tier_labels=labels)
+                pace = form.get("pace", "")
+                if pace not in ("", *config_module.PACES):
+                    raise ValueError("Unknown pace")
                 saved_id = store.save_collection(conn, data.collection, data.sql_dialect, data.tier_labels,
                                                  collection_id, group=data.group)
+                store.set_collection_pace(conn, saved_id, pace)
             except ValueError as exc:  # includes pydantic's ValidationError
                 errors = describe_errors(exc) if isinstance(exc, ValidationError) else [str(exc)]
                 return collection_page(request, form, errors, collection)

@@ -94,6 +94,7 @@ def _collection(row: sqlite3.Row) -> Collection:
         max_unlocked_tier=row["max_unlocked_tier"],
         archived=bool(row["archived"]),
         group=row["group_name"],
+        pace=row["pace"],
     )
 
 
@@ -135,6 +136,11 @@ def save_collection(
             (group, name, sql_dialect, labels, collection_id),
         )
         return collection_id
+
+
+def set_collection_pace(conn: sqlite3.Connection, collection_id: int, pace: str) -> None:
+    with conn:
+        conn.execute("UPDATE collection SET pace = ? WHERE id = ?", (pace, collection_id))
 
 
 def delete_collection(conn: sqlite3.Connection, collection_id: int) -> int:

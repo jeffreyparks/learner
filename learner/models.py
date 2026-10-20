@@ -30,6 +30,7 @@ class Collection:
     max_unlocked_tier: int
     archived: bool
     group: str = ""  # optional group label, e.g. "Data science" (DESIGN.md §12.2)
+    pace: str = ""  # "" = the global pace; else "slow" | "medium" | "fast" (DESIGN.md §5.7)
 
     @property
     def display_name(self) -> str:

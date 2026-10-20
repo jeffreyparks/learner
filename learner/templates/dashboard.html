@@ -15,7 +15,7 @@
 {% for snap, current in items %}
 <section class="card-panel collection">
   <header>
-    <h2>{{ snap.collection.name }}</h2>
+    <h2>{{ snap.collection.name }}{% if snap.collection.pace %} <span class="badge" title="This collection's own pace">{{ snap.collection.pace }} pace</span>{% endif %}</h2>
     <span class="links">
       <a href="/browse?collection_id={{ snap.collection.id }}">Cards</a> ·
       <a href="/cards/new?collection_id={{ snap.collection.id }}">Add card</a> ·
@@ -60,7 +60,7 @@
   </label>
   <noscript><button type="submit">Save</button></noscript>
 </form>
-<p class="muted small">A card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.{% if cfg.pinned %} Some values are fixed in learner.toml.{% endif %}</p>
+<p class="muted small">Unless a collection sets its own pace, a card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.{% if cfg.pinned %} Some values are fixed in learner.toml.{% endif %}</p>
 
 {% if archived %}
 <details class="archived-list">

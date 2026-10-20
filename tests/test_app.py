@@ -427,3 +427,23 @@ def test_pace_picker_leaves_settings_pinned_in_toml_alone(tmp_path):
     client.post("/settings/pace", data={"pace": "fast"})
     page = client.get("/").text
     assert "unlocks at 90% known" in page and "after 1 correct answer in" in page
+
+
+def test_collection_pace_overrides_the_global_pace(tmp_path):
+    client = make_client(tmp_path)
+    form = {"name": "Starter", "group": "", "sql_dialect": "mysql"}
+    page = client.get("/collections/1").text
+    assert '<option value="" selected>Same as everywhere' in page
+    name = re.search(r'name="name" value="([^"]*)"', page)[1]
+    form["name"] = name
+    assert client.post("/collections/1", data={**form, "pace": "fast"}, follow_redirects=False).status_code == 303
+    assert '<option value="fast" selected>' in client.get("/collections/1").text
+    assert "fast pace" in client.get("/").text
+    # its own pace shows on its study pages, while the global pace is untouched
+    client.post("/settings/pace", data={"pace": "slow"})
+    locked = client.get("/study/1/2", follow_redirects=False)
+    assert "when 50% of" in locked.text
+    assert client.post("/collections/1", data={**form, "pace": "turbo"}).status_code == 200  # form error, not saved
+    assert '<option value="fast" selected>' in client.get("/collections/1").text
+    client.post("/collections/1", data={**form, "pace": ""})
+    assert "fast pace" not in client.get("/").text
