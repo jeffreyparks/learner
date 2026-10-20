@@ -49,7 +49,18 @@
 <p class="muted">No collections yet. <a href="/collections/new">Create one</a> or <a href="/import">import a file</a>.</p>
 {% endfor %}
 
-<p class="muted small">A card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions{% if cfg.pace %} ({{ cfg.pace }} pace){% endif %}. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.</p>
+<form class="pace" method="post" action="/settings/pace">
+  <label>Pace
+    <select name="pace" onchange="this.form.submit()">
+      <option value="" {% if not cfg.pace %}selected{% endif %}>Default</option>
+      <option value="slow" {% if cfg.pace == "slow" %}selected{% endif %}>Slow: take my time</option>
+      <option value="medium" {% if cfg.pace == "medium" %}selected{% endif %}>Medium: I feel confident</option>
+      <option value="fast" {% if cfg.pace == "fast" %}selected{% endif %}>Fast: super quick review</option>
+    </select>
+  </label>
+  <noscript><button type="submit">Save</button></noscript>
+</form>
+<p class="muted small">A card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.{% if cfg.pinned %} Some values are fixed in learner.toml.{% endif %}</p>
 
 {% if archived %}
 <details class="archived-list">

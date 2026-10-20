@@ -153,6 +153,9 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
         store.migrate(conn)
         if not store.list_collections(conn, include_archived=True):
             seed_starter(conn)
+        saved_pace = store.get_setting(conn, "pace")
+        if saved_pace is not None:  # a pace chosen in the UI beats `pace` in learner.toml
+            cfg = config_module.with_pace(cfg, saved_pace)
         tiers.tidy_all(conn)  # every collection's tiers are 1…N with a label entry each (DESIGN.md §12.5)
 
     app = FastAPI(title="Learner", docs_url=None, redoc_url=None)
@@ -597,6 +600,17 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             except tiers.TierError as exc:
                 message = str(exc)
         return redirect(f"/collections/{collection_id}?tiers={quote(message)}#tiers")
+
+    @app.post("/settings/pace")
+    def set_pace(pace: str = Form("")):
+        nonlocal cfg
+        if pace not in ("", *config_module.PACES):
+            raise HTTPException(400, "Unknown pace")
+        cfg = config_module.with_pace(cfg, pace)
+        templates.env.globals["cfg"] = cfg
+        with db() as conn:
+            store.set_setting(conn, "pace", pace)
+        return redirect("/")
 
     @app.post("/collections/{collection_id:int}/archive")
     def collection_archive(collection_id: int):

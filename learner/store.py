@@ -28,6 +28,16 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def get_setting(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM setting WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+    conn.commit()
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     """Apply numbered migrations newer than PRAGMA user_version, each in its own transaction."""
     current = conn.execute("PRAGMA user_version").fetchone()[0]

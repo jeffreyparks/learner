@@ -407,3 +407,23 @@ def test_new_collection_in_a_group_from_the_card_form(client):
             "tier": "1", "answer_format": "text", "prompt": "What is a prior?", "reference_answer": "Belief before data."}
     assert "Saved." in client.post("/cards/new", data=form).text
     assert "Data science › Probability" in client.get("/browse").text
+
+
+def test_pace_picker_changes_settings_and_persists(tmp_path):
+    client = make_client(tmp_path)
+    assert client.post("/settings/pace", data={"pace": "fast"}, follow_redirects=False).status_code == 303
+    page = client.get("/").text
+    assert '<option value="fast" selected>' in page
+    assert "after 1 correct answer in" in page
+    # a fresh app on the same database comes back at the saved pace
+    assert '<option value="fast" selected>' in make_client(tmp_path).get("/").text
+    client.post("/settings/pace", data={"pace": ""})
+    assert "after 2 correct answers" in client.get("/").text
+    assert client.post("/settings/pace", data={"pace": "turbo"}).status_code == 400
+
+
+def test_pace_picker_leaves_settings_pinned_in_toml_alone(tmp_path):
+    client = make_client(tmp_path, pinned=("unlock_pct",), unlock_pct=0.9)
+    client.post("/settings/pace", data={"pace": "fast"})
+    page = client.get("/").text
+    assert "unlocks at 90% known" in page and "after 1 correct answer in" in page
