@@ -22,6 +22,8 @@ PROMPTS = Path(__file__).parent / "prompts"
 SEPARATOR = "\n=== USER MESSAGE ===\n"
 VERDICTS = ("correct", "partially_correct", "incorrect")
 MAX_HINT_LEVEL = 3
+MAX_ASK_TURNS = 12  # most recent messages of a tutor chat sent to the model
+MAX_ASK_CHARS = 4000  # per message
 
 GRADE_SCHEMA = {
     "type": "object",
@@ -43,6 +45,12 @@ HINT_SCHEMA = {
     "additionalProperties": False,
 }
 
+ASK_SCHEMA = {
+    "type": "object",
+    "properties": {"reply": {"type": "string"}},
+    "required": ["reply"],
+    "additionalProperties": False,
+}
 
 SEQUENCE_SCHEMA = {
     "type": "object",
@@ -139,6 +147,32 @@ def hint(
     text = data.get("hint")
     if not isinstance(text, str) or not text.strip():
         raise LLMError("The tutor's hint came back empty.")
+    return text.strip()
+
+
+def ask(
+    provider: LLMProvider, card: Card, answer: str, messages: Sequence[tuple[str, str]], answer_shown: bool,
+    dialect: str, images: Sequence[ImageInput] = (),
+) -> str:
+    """Reply to the learner's latest question about a card. `messages` is the chat so far as
+    (role, text) pairs, "learner" or "tutor", ending with the learner's new question."""
+    recent = [(role, text.strip()[:MAX_ASK_CHARS]) for role, text in messages if text.strip()][-MAX_ASK_TURNS:]
+    if not recent or recent[-1][0] != "learner":
+        raise LLMError("There's no question to answer.")
+    system, user = render(
+        "ask",
+        format=_format_label(card, dialect),
+        prompt=card.prompt,
+        reference_answer=card.reference_answer,
+        visible="yes" if answer_shown else "no",
+        phase="answer_shown" if answer_shown else "attempting",
+        answer=answer.strip() or "(nothing written yet)",
+        conversation="\n\n".join(f"<{role}>\n{text}\n</{role}>" for role, text in recent),
+    )
+    data = provider.complete("ask", system, user, ASK_SCHEMA, images)
+    text = data.get("reply")
+    if not isinstance(text, str) or not text.strip():
+        raise LLMError("The tutor's reply came back empty.")
     return text.strip()
 
 

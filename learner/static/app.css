@@ -196,3 +196,14 @@ details.sample .markdown { padding: 4px 12px; }
 .tier-table td button { padding: 3px 9px; font-size: 0.85rem; }
 #tiers .tier-table input[type=text] { min-width: 220px; }
 #tiers .badge.locked { margin-left: 4px; }
+
+.tutor { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 16px; margin: 12px 0; }
+.tutor summary { cursor: pointer; font-weight: 600; }
+.tutor-log { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; max-height: 28rem; overflow-y: auto; }
+.tutor-msg { margin: 0; padding: 8px 12px; border-radius: var(--radius); max-width: 92%; }
+.tutor-msg.learner { align-self: flex-end; background: var(--code-bg); white-space: pre-wrap; }
+.tutor-msg.tutor { align-self: flex-start; background: var(--notice-bg); }
+.tutor-msg.tutor > :first-child { margin-top: 0; }
+.tutor-msg.tutor > :last-child { margin-bottom: 0; }
+.tutor-input { display: flex; gap: 8px; align-items: flex-end; }
+.tutor-input textarea { flex: 1; }

@@ -14,6 +14,7 @@ from io import BytesIO
 from urllib.parse import quote, urlsplit
 from contextlib import closing
 from dataclasses import dataclass
+from typing import Literal
 from pathlib import Path
 
 import uvicorn
@@ -68,6 +69,18 @@ class TutorRequest(BaseModel):
     answer: str = ""
     level: int | None = None  # hints only
     earlier: list[str] = []  # hints only: the hints already shown, so the next one goes further
+
+
+class AskMessage(BaseModel):
+    role: Literal["learner", "tutor"]
+    text: str
+
+
+class AskRequest(BaseModel):
+    card_id: int
+    answer: str = ""
+    answer_shown: bool = False  # the reference answer is on screen, so the tutor may explain it
+    messages: list[AskMessage]  # the chat so far, ending with the learner's new question
 
 
 @dataclass
@@ -347,6 +360,18 @@ def create_app(cfg: Config, provider: LLMProvider | None = None) -> FastAPI:
             return {"hint": tutor.hint(provider, card, body.answer, level, earlier, dialect, images), "level": level}
         except LLMError as exc:
             return {"error": str(exc)}
+
+    @app.post("/ask")
+    def ask_tutor(body: AskRequest):
+        card, dialect, images = card_and_dialect(body.card_id)
+        if provider is None:
+            return {"error": "No LLM is configured."}
+        try:
+            reply = tutor.ask(provider, card, body.answer, [(m.role, m.text) for m in body.messages],
+                              body.answer_shown, dialect, images)
+        except LLMError as exc:
+            return {"error": str(exc)}
+        return {"reply": reply, "html": str(render_markdown(reply))}
 
     # --- images (DESIGN.md §12.1) ---
 

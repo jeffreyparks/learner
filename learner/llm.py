@@ -59,7 +59,7 @@ class ClaudeProvider:
     AUTHORING_MAX_TOKENS = 64000
 
     def __init__(self, cfg: Config, client: anthropic.Anthropic | None = None):
-        self.models = {"grade": cfg.grade_model, "hint": cfg.hint_model,
+        self.models = {"grade": cfg.grade_model, "hint": cfg.hint_model, "ask": cfg.ask_model,
                        "sequence": cfg.sequence_model, "draft": cfg.draft_model}
         self.effort = cfg.effort
         self.authoring_effort = {"sequence": cfg.sequence_effort, "draft": cfg.draft_effort}
@@ -145,6 +145,8 @@ class FakeProvider:
         if task == "hint":
             level = _tag(user, "hint_level") or "1"
             return {"hint": f"(Fake hint, level {level}) Re-read the prompt and think about the key idea it's testing."}
+        if task == "ask":
+            return {"reply": f"(Fake tutor, {_tag(user, 'phase')}) Here's how I'd think about it: start from what the prompt is really testing."}
         if task == "sequence" and "<subdecks>" in user:  # ordering an Anki deck's subdecks
             names = re.findall(r'<subdeck name="([^"]*)"', user)
             return {"order": list(reversed(names))}
