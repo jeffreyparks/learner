@@ -181,33 +181,55 @@ def default_tier(summaries: Sequence[TierSummary]) -> int | None:
 # --- sessions ---
 
 
+def answers_since(attempts: Sequence[Attempt], exclude_session: str | None = None) -> dict[int, int]:
+    """For each card answered before, how many answers (to any card) came after its last one: the spacing it has had."""
+    ordered = [a for a in sorted(attempts, key=lambda a: a.id) if a.session_id != exclude_session]
+    last = {a.card_id: i for i, a in enumerate(ordered)}
+    return {card_id: len(ordered) - 1 - i for card_id, i in last.items()}
+
+
 def session_plan(
-    cards: Sequence[Card], start: dict[int, Progress], tier: int, cfg: Config, order: CardSequence | None = None
+    cards: Sequence[Card], start: dict[int, Progress], tier: int, cfg: Config, order: CardSequence | None = None,
+    waited: dict[int, int] | None = None,
 ) -> list[int]:
     """Card ids planned for a session, fixed by the progress at the session's start (DESIGN.md §5.5).
 
     New cards follow `order` (the concept graph, ready cards first) when given, else creation order.
+    `waited` is `answers_since` at the session's start: a card answered fewer than `space_cards` answers ago
+    sits out (§5.8), and new cards take the places it leaves.
     """
+    waited = waited or {}
+
+    def spaced(c: Card) -> bool:
+        return c.id in waited and waited[c.id] < cfg.space_cards
+
     in_tier = [c for c in cards if c.tier == tier]
+    complete = not any(start[c.id].status in (LEARNING, NEW) for c in in_tier)
+    all_learning = [c for c in cards if c.tier <= tier and start[c.id].status == LEARNING]
     learning = sorted(
-        (c for c in in_tier if start[c.id].status == LEARNING),
-        key=lambda c: (start[c.id].recent_accuracy, start[c.id].last_seen or "", c.id),
+        (c for c in all_learning if not spaced(c)),
+        key=lambda c: (c.tier != tier, start[c.id].recent_accuracy, start[c.id].last_seen or "", c.id),
     )
     new = sorted((c for c in in_tier if start[c.id].status == NEW), key=lambda c: (c.created_at, c.id))
     if order is not None:
         known_ids = {cid for cid, p in start.items() if p.status == KNOWN}
         by_id = {c.id: c for c in new}
         new = [by_id[cid] for cid in sequencer.new_card_order(order, tier, set(by_id), known_ids)]
-    known = sorted(
-        (c for c in cards if c.tier <= tier and start[c.id].status == KNOWN),
-        key=lambda c: (start[c.id].last_seen or "", c.id),
-    )
-    if not learning and not new:  # tier complete: a short refresher-only pass
-        return [c.id for c in known[: max(1, cfg.session_size // 4)]]
-    n_new = min(len(new), cfg.new_per_session)
-    n_refresh = min(len(known), round(cfg.session_size * cfg.refresher_pct))
-    n_learning = max(0, cfg.session_size - n_new - n_refresh)
-    return [c.id for c in learning[:n_learning] + new[:n_new] + known[:n_refresh]]
+    all_known = [c for c in cards if c.tier <= tier and start[c.id].status == KNOWN]
+    known = sorted((c for c in all_known if not spaced(c)), key=lambda c: (start[c.id].last_seen or "", c.id))
+    if complete:  # a short refresher-only pass
+        plan = known[: max(1, cfg.session_size // 4)]
+    else:
+        n_new = min(len(new), cfg.new_per_session)
+        n_refresh = min(len(known), round(cfg.session_size * cfg.refresher_pct))
+        n_learning = min(len(learning), max(0, cfg.session_size - n_new - n_refresh))
+        held_back = len(all_learning) - len(learning)
+        n_new = min(len(new), n_new + min(held_back, max(0, cfg.session_size - n_new - n_refresh - n_learning)))
+        plan = learning[:n_learning] + new[:n_new] + known[:n_refresh]
+    if not plan:  # everything is spaced out: rather than an empty session, the longest-waiting cards come back
+        waiting = sorted(all_learning if not complete else all_known, key=lambda c: (-waited.get(c.id, 0), c.id))
+        plan = waiting[: cfg.session_size if not complete else max(1, cfg.session_size // 4)]
+    return [c.id for c in plan]
 
 
 @dataclass(frozen=True)
@@ -223,7 +245,7 @@ def session_state(
 ) -> SessionState:
     """What to show next. Stateless: the session is reconstructed from its attempts every time."""
     start = progress_map(cards, attempts, cfg.known_streak, exclude_session=session_id, assisted_credit=cfg.assisted_credit)
-    plan = session_plan(cards, start, tier, cfg, order)
+    plan = session_plan(cards, start, tier, cfg, order, answers_since(attempts, exclude_session=session_id))
     active = {c.id for c in cards}
     session = [a for a in sorted(attempts, key=lambda a: a.id) if a.session_id == session_id and a.card_id in active]
 

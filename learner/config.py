@@ -37,7 +37,8 @@ class Config:
     known_streak: int = 2
     unlock_pct: float = 0.80
     requeue_gap: int = 3
-    max_attempts_per_card: int = 3
+    max_attempts_per_card: int = 2
+    space_cards: int = 20  # a card sits out new sessions until this many other answers come after it
     pinned: tuple[str, ...] = ()  # pace settings set explicitly in learner.toml; a pace choice never overrides these
     # [llm]
     provider: str = "claude"  # "claude" | "fake" (canned answers, for demos and tests) | "off"
@@ -55,7 +56,7 @@ class Config:
         for name in ("session_size", "known_streak", "max_attempts_per_card", "port"):
             if getattr(self, name) < 1:
                 raise ConfigError(f"{name} must be at least 1")
-        for name in ("new_per_session", "requeue_gap"):
+        for name in ("new_per_session", "requeue_gap", "space_cards"):
             if getattr(self, name) < 0:
                 raise ConfigError(f"{name} must not be negative")
         if self.pace and self.pace not in PACES:
@@ -97,6 +98,7 @@ SECTIONS = {
         "unlock_pct",
         "requeue_gap",
         "max_attempts_per_card",
+        "space_cards",
     ),
     "llm": (
         "provider", "grade_model", "hint_model", "ask_model", "sequence_model", "draft_model",
