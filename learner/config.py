@@ -16,7 +16,7 @@ class ConfigError(ValueError):
 # anything also set explicitly in learner.toml wins over the preset.
 PACES: dict[str, dict[str, float | int]] = {
     "slow": dict(unlock_pct=0.90, known_streak=3, new_per_session=3, refresher_pct=0.20, assisted_credit=0.0),
-    "medium": dict(unlock_pct=0.70, known_streak=2, new_per_session=6, refresher_pct=0.10, assisted_credit=0.5),
+    "medium": dict(unlock_pct=0.70, known_streak=2, new_per_session=10, refresher_pct=0.10, assisted_credit=0.5),
     "fast": dict(unlock_pct=0.50, known_streak=1, new_per_session=10, refresher_pct=0.05, assisted_credit=0.5),
 }
 

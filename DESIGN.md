@@ -141,7 +141,7 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
 |---|---|---|---|
 | `unlock_pct` | 90% | 70% | 50% |
 | `known_streak` | 3 | 2 | 1 |
-| `new_per_session` | 3 | 6 | 10 |
+| `new_per_session` | 3 | 10 | 10 |
 | `refresher_pct` | 20% | 10% | 5% |
 | `assisted_credit` | 0 | 0.5 | 0.5 |
 
