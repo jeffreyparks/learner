@@ -78,6 +78,7 @@ class Attempt:
     session_id: str
     ts: str
     outcome: str
+    llm_verdict: str | None = None
 
 
 @dataclass(frozen=True)

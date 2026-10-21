@@ -102,7 +102,7 @@ Every attempt ends with exactly one outcome, whoever grades it:
 |---|---|---|
 | `correct` | Right, no hints used | +1 (see §5.4) |
 | `assisted` | Right, but used **any** hint | unchanged (or +`assisted_credit`, §5.7) |
-| `incorrect` | Wrong or partially right | reset to 0 |
+| `incorrect` | Wrong, or partially right | reset to 0, unless the grader said `partially_correct`: then unchanged (or +`assisted_credit` if first in the session) |
 | `revealed` | **Show answer** instead of answering | unchanged, and not counted as right or wrong anywhere (status, accuracy, stats) |
 
 A peek still uses up the card's first attempt in that session, so answering it right after peeking can't raise the streak. A card that has only ever been peeked at stays `new`.
@@ -210,7 +210,7 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
     "feedback": "Short explanation of what was right/wrong."
   }
   ```
-- `correct` maps to `correct` or `assisted`, depending on whether you used a hint. `partially_correct` and `incorrect` map to `incorrect`, and the feedback explains the gap.
+- `correct` maps to `correct` or `assisted`, depending on whether you used a hint. `partially_correct` and `incorrect` both map to `incorrect` (so the card comes back this session), but a `partially_correct` one doesn't reset the streak (§5.2), and the feedback explains the gap.
 - **Free text:** graded on meaning against the rubric, not wording.
 - **Code:** graded by reading it, not running it. The grader judges whether the code would do the job. An alternative approach with the same effect (e.g. a CTE instead of a subquery, or `dict.get` instead of `try/except`) is marked correct, with an optional note on style. A syntax error is reported but doesn't automatically fail the answer; the grader decides.
 - **Speed:** on submit, the reference answer appears immediately and the verdict follows a few seconds later. You can mark yourself (`1`/`2`) without waiting.

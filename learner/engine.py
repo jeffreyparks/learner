@@ -17,6 +17,7 @@ from .sequencer import CardSequence
 
 NEW, LEARNING, KNOWN = "new", "learning", "known"
 CORRECT, ASSISTED, INCORRECT = "correct", "assisted", "incorrect"
+PARTIAL = "partially_correct"  # the grader's verdict on a wrong-marked attempt that was on the right track
 REVEALED = "revealed"  # "Show answer": no effect on the score either way (DESIGN.md §5.2)
 RECENT_WINDOW = 5  # attempts used to judge how weak a learning card is
 
@@ -44,7 +45,8 @@ def card_progress(
     card: Card, attempts: Sequence[Attempt], known_streak: int, assisted_credit: float = 0.0
 ) -> Progress:
     """`attempts` are this card's attempts in order. Only a card's first attempt in a session can raise its streak,
-    except that a right answer after a miss in the same session earns `assisted_credit` once per session.
+    except that a partly-right answer (the grader's `partially_correct`) holds the streak instead of resetting it,
+    and a right answer after a miss in the same session earns `assisted_credit` once per session.
 
     A `revealed` attempt changes nothing itself, but it still uses up the session's first attempt:
     answering right after peeking can't raise the streak.
@@ -62,7 +64,10 @@ def card_progress(
         sessions_seen.add(a.session_id)
         if a.outcome == REVEALED:
             continue
-        if a.outcome == INCORRECT:
+        if a.outcome == INCORRECT and a.llm_verdict == PARTIAL:
+            if first_in_session:  # on the right track: the streak holds, like an assisted answer
+                streak += assisted_credit
+        elif a.outcome == INCORRECT:
             streak = 0
             missed.add(a.session_id)
         elif a.outcome == CORRECT and first_in_session:
