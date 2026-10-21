@@ -9,14 +9,14 @@
   {% endif %}
 
   {% if tier %}
-  <p>{{ snap.collection.tier_label(tier.tier) }}: {{ tier.known }} of {{ tier.total }} known ({{ (tier.pct_known * 100)|round|int }}%).</p>
+  <p>{{ snap.collection.tier_label(tier.tier) }}: {{ (tier.pct_progress * 100)|round|int }}% progress · {{ tier.total - tier.new }} of {{ tier.total }} cards started · {{ tier.known }} known.</p>
   {% if tier.complete %}
     <p class="notice">This tier is complete.
     {% if next_tier %}Try {{ snap.collection.tier_label(next_tier.tier) }} next.{% endif %}</p>
   {% elif next_tier and next_tier.unlocked %}
     <p class="notice">{{ snap.collection.tier_label(next_tier.tier) }} is unlocked.</p>
   {% elif next_tier %}
-    <p class="muted">{{ snap.collection.tier_label(next_tier.tier) }} unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.</p>
+    <p class="muted">{{ snap.collection.tier_label(next_tier.tier) }} unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% progress.</p>
   {% endif %}
   {% endif %}
 

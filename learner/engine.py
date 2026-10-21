@@ -39,6 +39,11 @@ class Progress:
     attempts: int = 0
     recent_accuracy: float = 0.0
     last_seen: str | None = None
+    fraction: float = 0.0  # how far the streak is toward `known` (0-1); a known card counts as 1 whatever this says
+
+    @property
+    def credit(self) -> float:
+        return 1.0 if self.status == KNOWN else self.fraction
 
 
 def card_progress(
@@ -80,7 +85,7 @@ def card_progress(
     recent = scored[-RECENT_WINDOW:]
     accuracy = sum(a.outcome != INCORRECT for a in recent) / len(recent)
     status = KNOWN if streak >= known_streak else LEARNING
-    return Progress(status, streak, len(scored), accuracy, scored[-1].ts)
+    return Progress(status, streak, len(scored), accuracy, scored[-1].ts, min(streak / known_streak, 1.0))
 
 
 def progress_map(
@@ -106,19 +111,25 @@ class TierSummary:
     learning: int
     known: int
     unlocked: bool
+    credit: float = 0.0  # sum of each card's progress toward known (a known card is 1)
 
     @property
     def pct_known(self) -> float:
         return self.known / self.total if self.total else 0.0
 
     @property
+    def pct_progress(self) -> float:
+        """Streak-weighted: a card half-way to known counts half. What the bar shows and what unlocks the next tier."""
+        return self.credit / self.total if self.total else 0.0
+
+    @property
     def complete(self) -> bool:
         return self.total > 0 and self.known == self.total
 
 
-def _pct_known(cards: Sequence[Card], progress: dict[int, Progress], tier: int) -> float:
+def _pct_progress(cards: Sequence[Card], progress: dict[int, Progress], tier: int) -> float:
     in_tier = [c for c in cards if c.tier == tier]
-    return sum(progress[c.id].status == KNOWN for c in in_tier) / len(in_tier) if in_tier else 0.0
+    return sum(progress[c.id].credit for c in in_tier) / len(in_tier) if in_tier else 0.0
 
 
 def unlocked_through(
@@ -136,7 +147,7 @@ def unlocked_through(
     highest = max(stored_max, tiers[0])
     for lower, upper in zip(tiers, tiers[1:]):
         empty = not any(c.tier == lower for c in cards)
-        if lower <= highest < upper and (empty or _pct_known(cards, progress, lower) >= unlock_pct):
+        if lower <= highest < upper and (empty or _pct_progress(cards, progress, lower) >= unlock_pct):
             highest = upper
     return highest
 
@@ -155,6 +166,7 @@ def tier_summaries(
                 learning=counts[LEARNING],
                 known=counts[KNOWN],
                 unlocked=tier <= unlocked,
+                credit=sum(progress[c.id].credit for c in cards if c.tier == tier),
             )
         )
     return summaries

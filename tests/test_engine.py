@@ -210,3 +210,22 @@ def test_partial_then_right_retry_in_the_same_session_is_not_a_second_credit():
     c = card(1)
     attempts = [attempt(1, "s1", "incorrect", llm_verdict="partially_correct"), attempt(1, "s1", "correct")]
     assert engine.card_progress(c, attempts, 2, assisted_credit=0.5).streak == 0.5
+
+
+def test_progress_is_streak_toward_known_and_known_counts_fully():
+    c = card(1)
+    one = engine.card_progress(c, [attempt(1, "s1", "correct")], 2)
+    assert one.status == engine.LEARNING and one.credit == 0.5
+    two = engine.card_progress(c, [attempt(1, "s1", "correct"), attempt(1, "s2", "correct")], 2)
+    assert two.status == engine.KNOWN and two.credit == 1.0
+    assert engine.card_progress(c, [], 2).credit == 0.0
+
+
+def test_tier_progress_counts_half_way_cards_and_unlocks_on_it():
+    cards = [card(i, tier=1) for i in range(1, 5)] + [card(5, tier=2)]
+    half = engine.Progress(LEARNING, streak=1, fraction=0.5)
+    progress = {1: engine.Progress(KNOWN), 2: engine.Progress(KNOWN), 3: half, 4: half, 5: engine.Progress(NEW)}
+    summary = engine.tier_summaries(cards, progress, 1)[0]
+    assert (summary.known, summary.pct_known, summary.pct_progress) == (2, 0.5, 0.75)
+    assert engine.unlocked_through(cards, progress, stored_max=1, unlock_pct=0.7) == 2
+    assert engine.unlocked_through(cards, progress, stored_max=1, unlock_pct=0.8) == 1

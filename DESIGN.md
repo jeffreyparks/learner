@@ -148,7 +148,8 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
 `assisted_credit` is the streak a first-in-session `assisted` answer adds, and also what a right retry after a miss adds (a clean first-try answer adds 1), so with `0.5` two hinted answers equal one clean one. `fast` uses a streak of 1, which gives up the "survive a break" spacing of §5.4.
 
 ### 5.6 Tier unlock & completion
-- **Unlock:** Tier N+1 unlocks when at least `unlock_pct` (default **80%**) of Tier N's active cards are `known`.
+- **Progress:** a card's progress is its streak toward `known`, from 0 to 1 (streak ÷ `known_streak`, so a card half-way there counts half, and a `known` card counts 1). A tier's progress is the average over its active cards. This is the percentage the dashboard bar and end-of-session screen show, next to the plain count of `known` cards.
+- **Unlock:** Tier N+1 unlocks when Tier N's progress reaches `unlock_pct` (default **80%**). On `fast` (`known_streak` 1) this is the same as the share of cards that are `known`.
 - **Sticky:** once a tier is unlocked, it stays unlocked, even if later misses drop the lower tier below the threshold.
 - **Soft:** before it unlocks, you can still start it after a warning.
 - **Tier complete:** when every active card in a tier is `known`, the dashboard and end-of-session screen say so and suggest the next tier. A session on a completed tier is a short refresher-only pass.
@@ -326,7 +327,7 @@ learner/
 
 ## 10. Screens
 
-1. **Dashboard:** collections with per-tier progress (% known, unlocked or not, "complete" badge), and a "Study" button.
+1. **Dashboard:** collections with per-tier progress (progress %, known count, unlocked or not, "complete" badge), and a "Study" button.
 2. **Study:** prompt → answer (text box or code editor) → `Alt+H` hint → `Ctrl+Enter` submit → reference answer + references immediately, verdict + feedback when ready → `Enter` accept, or `1`/`2` to mark right/wrong yourself → next.
    - End screen: session summary, plus "Tier complete, try Tier N+1" when it applies.
 3. **Browse / Edit:** filter by collection, tier, tag, or status. Edit cards (form with markdown preview, the code editor for code fields, and a references list), edit or archive collections (name, tier labels, SQL dialect), and import/export JSON.
