@@ -16,9 +16,10 @@ def card(id, tier=1, reset_at=None):
     )
 
 
-def attempt(card_id, session, outcome, ts=None):
+def attempt(card_id, session, outcome, ts=None, llm_verdict=None):
     n = next(_ids)
-    return Attempt(id=n, card_id=card_id, session_id=session, ts=ts or f"2026-02-01T00:{n:05d}", outcome=outcome)
+    return Attempt(id=n, card_id=card_id, session_id=session, ts=ts or f"2026-02-01T00:{n:05d}", outcome=outcome,
+                   llm_verdict=llm_verdict)
 
 
 def status(c, attempts, known_streak=2):
@@ -193,3 +194,19 @@ def test_retry_credit_needs_a_miss_not_a_peek():
     assert engine.card_progress(c, peek_then_right, 2, assisted_credit=0.5).streak == 0
     first_try_then_again = [attempt(1, "s1", "correct"), attempt(1, "s1", "correct")]
     assert engine.card_progress(c, first_try_then_again, 2, assisted_credit=0.5).streak == 1
+
+
+def test_partially_correct_holds_the_streak_instead_of_resetting_it():
+    c = card(1)
+    earned = [attempt(1, "s1", "correct")]
+    partial = attempt(1, "s2", "incorrect", llm_verdict="partially_correct")
+    assert engine.card_progress(c, earned + [partial], 2).streak == 1  # held, not reset
+    assert engine.card_progress(c, earned + [partial], 2, assisted_credit=0.5).streak == 1.5
+    plain_miss = attempt(1, "s2", "incorrect", llm_verdict="incorrect")
+    assert engine.card_progress(c, earned + [plain_miss], 2).streak == 0
+
+
+def test_partial_then_right_retry_in_the_same_session_is_not_a_second_credit():
+    c = card(1)
+    attempts = [attempt(1, "s1", "incorrect", llm_verdict="partially_correct"), attempt(1, "s1", "correct")]
+    assert engine.card_progress(c, attempts, 2, assisted_credit=0.5).streak == 0.5

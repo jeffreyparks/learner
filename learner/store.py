@@ -331,7 +331,7 @@ def set_analysis_manual(conn: sqlite3.Connection, card_id: int, manual: bool) ->
 
 def list_attempts(conn: sqlite3.Connection, collection_id: int) -> list[Attempt]:
     rows = conn.execute(
-        """SELECT a.id, a.card_id, a.session_id, a.ts, a.outcome
+        """SELECT a.id, a.card_id, a.session_id, a.ts, a.outcome, a.llm_verdict
            FROM attempt a JOIN card c ON c.id = a.card_id
            WHERE c.collection_id = ? ORDER BY a.id""",
         (collection_id,),
