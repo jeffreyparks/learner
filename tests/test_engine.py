@@ -229,3 +229,43 @@ def test_tier_progress_counts_half_way_cards_and_unlocks_on_it():
     assert (summary.known, summary.pct_known, summary.pct_progress) == (2, 0.5, 0.75)
     assert engine.unlocked_through(cards, progress, stored_max=1, unlock_pct=0.7) == 2
     assert engine.unlocked_through(cards, progress, stored_max=1, unlock_pct=0.8) == 1
+
+
+# --- spacing ---
+
+
+def test_recently_answered_card_sits_out_and_new_cards_take_its_place():
+    cfg = Config(session_size=4, new_per_session=1, refresher_pct=0, space_cards=3)
+    cards = [card(i) for i in range(1, 6)]
+    start = {i: engine.Progress(NEW) for i in range(1, 6)}
+    start[1] = engine.Progress(LEARNING, recent_accuracy=0.5)
+    start[2] = engine.Progress(LEARNING, recent_accuracy=0.5)
+    waited = {1: 0, 2: 5}  # card 1 was the last thing answered; card 2 has had 5 answers since
+    assert engine.session_plan(cards, start, 1, cfg, waited=waited) == [2, 3, 4]
+
+
+def test_back_to_back_session_does_not_repeat_the_card_just_answered():
+    cfg = Config(session_size=10, new_per_session=5, space_cards=2)
+    cards = [card(i) for i in range(1, 4)]
+    attempts = [attempt(1, "s1", INCORRECT), attempt(2, "s1", CORRECT), attempt(1, "s1", CORRECT)]
+    assert engine.session_state(cards, attempts, "s2", 1, cfg).next_card_id == 3
+
+
+def test_everything_spaced_still_gives_a_session_longest_waiting_first():
+    cfg = Config(session_size=10, new_per_session=5, space_cards=50)
+    cards = [card(1), card(2)]
+    attempts = [attempt(1, "s1", INCORRECT), attempt(2, "s1", INCORRECT)]
+    assert engine.session_state(cards, attempts, "s2", 1, cfg).next_card_id == 1
+
+
+def test_learning_cards_from_lower_tiers_join_the_session():
+    cfg = Config(session_size=10, new_per_session=5, refresher_pct=0)
+    cards = [card(1, tier=1), card(2, tier=2), card(3, tier=2)]
+    start = {1: engine.Progress(LEARNING), 2: engine.Progress(LEARNING), 3: engine.Progress(NEW)}
+    assert engine.session_plan(cards, start, 2, cfg) == [2, 1, 3]  # this tier's learning cards first
+
+
+def test_answers_since_counts_answers_after_each_cards_last_one():
+    attempts = [attempt(1, "s1", CORRECT), attempt(2, "s1", CORRECT), attempt(1, "s1", CORRECT), attempt(3, "s2", CORRECT)]
+    assert engine.answers_since(attempts) == {1: 1, 2: 2, 3: 0}
+    assert engine.answers_since(attempts, exclude_session="s2") == {1: 0, 2: 1}

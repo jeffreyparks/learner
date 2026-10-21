@@ -121,16 +121,18 @@ A wrong answer on a `known` card resets the streak, so the card drops back to `l
 ### 5.4 One step forward per session
 **Only a card's first attempt in a session can raise its streak.** Later attempts in the same session (misses that come back, refreshers) can still reset the streak if wrong, and they don't raise it, with one exception: a `correct` answer after a miss in the same session adds `assisted_credit` (once per session), so a recovered card isn't a wasted session.
 
-So "2 in a row" means right in **two separate sessions**. There's no calendar, but a card has to survive a break before it's `known`. Short-term memory alone doesn't count.
+So "2 in a row" means right in **two separate sessions**. There's no calendar, but a card has to survive a break before it's `known`: spacing (§5.8) keeps a card you just answered out of the next session, so back-to-back sessions can't count as a break. Short-term memory alone doesn't count.
 
 ### 5.5 Session
 A session covers **one collection and one tier**. By default that's the highest unlocked tier, and you can pick another one.
 
 Queue, in priority order, up to `session_size` (default **20**):
-1. **Misses from this session.** They come back about 3 cards later, for practice only (§5.4).
-2. **`learning` cards**, weakest first, judged by accuracy over their last 5 attempts.
-3. **`new` cards** in concept-graph order (§6), up to `new_per_session` (default **5**).
+1. **Misses from this session.** They come back about 3 cards later, once (`max_attempts_per_card`, default **2** tries per session), for practice only (§5.4).
+2. **`learning` cards** from this tier, then from lower tiers, weakest first, judged by accuracy over their last 5 attempts.
+3. **`new` cards** in concept-graph order (§6), up to `new_per_session` (default **5**), plus one more for each place a spaced-out `learning` card left empty.
 4. **Refresher:** `known` cards from this tier and lower ones, **least recently seen first**, up to `refresher_pct` of the session (default **10%**). This is the only resurfacing mechanism; nothing is time-based.
+
+Cards still spaced out (§5.8) are left out of 2 and 4.
 
 ### 5.7 Pace
 `pace = "slow" | "medium" | "fast"` in `[study]` sets five settings at once; any of them also set in `learner.toml` wins. Unset means the plain defaults.
@@ -153,6 +155,11 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
 - **Sticky:** once a tier is unlocked, it stays unlocked, even if later misses drop the lower tier below the threshold.
 - **Soft:** before it unlocks, you can still start it after a warning.
 - **Tier complete:** when every active card in a tier is `known`, the dashboard and end-of-session screen say so and suggest the next tier. A session on a completed tier is a short refresher-only pass.
+
+### 5.8 Spacing
+Spacing is counted in **answers, not time**. After you answer a card, it sits out new sessions until you've given `space_cards` (default **20**, about one session) other answers in that collection, on any card. A miss still comes back within its own session (§5.5); spacing only decides whether a later session shows it.
+
+If spacing would leave a session with nothing to show (no ready cards and no new ones), the cards that have waited longest come back anyway, so a small tier never blocks you.
 
 ---
 
