@@ -36,8 +36,8 @@
       {% elif t.tier == current %}<span class="badge current">current</span>{% endif %}
     </div>
     <div class="tier-progress">
-      <div class="bar" title="{{ (t.pct_known * 100)|round|int }}% known"><span style="width: {{ (t.pct_known * 100)|round|int }}%"></span></div>
-      <div class="counts">{{ t.known }} known · {{ t.learning }} learning · {{ t.new }} new</div>
+      <div class="bar" title="{{ (t.pct_progress * 100)|round|int }}% progress"><span style="width: {{ (t.pct_progress * 100)|round|int }}%"></span></div>
+      <div class="counts">{{ (t.pct_progress * 100)|round|int }}% · {{ t.known }} known · {{ t.learning }} learning · {{ t.new }} new</div>
     </div>
     {% if t.total %}<a class="button {% if t.tier == current %}primary{% endif %}" href="/study/{{ snap.collection.id }}/{{ t.tier }}">Study</a>
     {% else %}<a class="button secondary" href="/cards/new?collection_id={{ snap.collection.id }}&amp;tier={{ t.tier }}">Add card</a>{% endif %}
@@ -60,7 +60,7 @@
   </label>
   <noscript><button type="submit">Save</button></noscript>
 </form>
-<p class="muted small">Unless a collection sets its own pace, a card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions. The next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% known.{% if cfg.pinned %} Some values are fixed in learner.toml.{% endif %}</p>
+<p class="muted small">Unless a collection sets its own pace, a card is <em>known</em> after {{ cfg.known_streak }} correct answer{{ 's' if cfg.known_streak != 1 }} in separate sessions. A card half-way to known counts half toward progress, and the next tier unlocks at {{ (cfg.unlock_pct * 100)|round|int }}% progress.{% if cfg.pinned %} Some values are fixed in learner.toml.{% endif %}</p>
 
 {% if archived %}
 <details class="archived-list">

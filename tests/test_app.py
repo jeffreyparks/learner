@@ -447,7 +447,7 @@ def test_pace_picker_leaves_settings_pinned_in_toml_alone(tmp_path):
     client = make_client(tmp_path, pinned=("unlock_pct",), unlock_pct=0.9)
     client.post("/settings/pace", data={"pace": "fast"})
     page = client.get("/").text
-    assert "unlocks at 90% known" in page and "after 1 correct answer in" in page
+    assert "unlocks at 90% progress" in page and "after 1 correct answer in" in page
 
 
 def test_collection_pace_overrides_the_global_pace(tmp_path):
@@ -463,7 +463,7 @@ def test_collection_pace_overrides_the_global_pace(tmp_path):
     # its own pace shows on its study pages, while the global pace is untouched
     client.post("/settings/pace", data={"pace": "slow"})
     locked = client.get("/study/1/2", follow_redirects=False)
-    assert "when 50% of" in locked.text
+    assert "unlocks when 50% progress on" in locked.text
     assert client.post("/collections/1", data={**form, "pace": "turbo"}).status_code == 200  # form error, not saved
     assert '<option value="fast" selected>' in client.get("/collections/1").text
     client.post("/collections/1", data={**form, "pace": ""})
