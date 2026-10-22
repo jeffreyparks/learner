@@ -185,6 +185,7 @@ details.sample .markdown { padding: 4px 12px; }
 .markdown table { border-collapse: collapse; margin: 8px 0; font-size: 0.92rem; }
 .markdown th, .markdown td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; vertical-align: top; }
 .markdown th { background: var(--code-bg); }
+.math.block { overflow-x: auto; overflow-y: hidden; } /* a wide equation scrolls instead of widening the page */
 .mode-choice { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
 .stacked-inline { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 8px; }
 .stacked-inline label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 0.9rem; }

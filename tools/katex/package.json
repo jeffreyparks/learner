@@ -1,0 +1,11 @@
+{
+  "name": "learner-katex-vendor",
+  "private": true,
+  "description": "Copies KaTeX into learner/static/vendor/katex. Only needed when upgrading KaTeX; the app itself never runs Node.",
+  "scripts": {
+    "build": "rm -rf ../../learner/static/vendor/katex && mkdir -p ../../learner/static/vendor/katex && cp node_modules/katex/dist/katex.min.js node_modules/katex/dist/katex.min.css node_modules/katex/LICENSE ../../learner/static/vendor/katex/ && mkdir ../../learner/static/vendor/katex/fonts && cp node_modules/katex/dist/fonts/*.woff2 ../../learner/static/vendor/katex/fonts/"
+  },
+  "devDependencies": {
+    "katex": "0.19.0"
+  }
+}

@@ -24,6 +24,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
+from mdit_py_plugins.dollarmath import dollarmath_plugin
 from markupsafe import Markup, escape
 from pydantic import BaseModel, ValidationError
 
@@ -37,7 +38,9 @@ PACKAGE = Path(__file__).parent
 LOCAL_HOSTS = ("127.0.0.1", "localhost")
 NEW_COLLECTION = "new"  # the card form's "+ New collection…" option
 NEW_TIER = "new"  # the card form's "+ New tier at the end" option
-_markdown = MarkdownIt("commonmark", {"html": False}).enable("table")
+# $…$ and $$…$$ become math elements that KaTeX typesets in the browser. The pandoc rules (no space inside the
+# dollars, no digit right after the closing one) keep prices like "$5 and $10" as plain text.
+_markdown = MarkdownIt("commonmark", {"html": False}).enable("table").use(dollarmath_plugin, allow_space=False, allow_digits=False)
 
 
 def render_markdown(text: str) -> Markup:

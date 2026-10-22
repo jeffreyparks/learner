@@ -65,7 +65,7 @@ Collection        e.g. "Python", "SQL", "Machine Learning"
 | `id` | Integer primary key. |
 | `collection_id`, `tier` | Placement. A card can be moved freely. |
 | `answer_format` | `text` \| `python` \| `sql` (one field drives the editor, the checker, and grading; see §8) |
-| `prompt` | Markdown. Can include code blocks and tables. |
+| `prompt` | Markdown. Can include code blocks, tables and LaTeX math (`$…$` inline, `$$…$$` on their own lines for display), typeset by KaTeX. |
 | `reference_answer` | The canonical answer. |
 | `rubric` *(optional)* | Key points a correct answer must hit. Gives the grader something concrete to check. |
 | `references` *(optional)* | A list of `{title, url}` links to outside sources, such as the docs page for `pandas.merge` or the MySQL manual page on `LEFT JOIN`. Usually one or two. |
@@ -282,6 +282,7 @@ Each answer format is one entry in a small registry. Adding a language means add
 
 - **Frontend without a runtime build step.** Pages are rendered on the server with Jinja2 and use plain forms. Two small JS modules handle the rest: `editor.js` (CodeMirror setup, calling `/check`) and `app.js` (study keys, card form). Grading and hints are plain `fetch` calls to `/grade` and `/hint`; HTMX turned out to be unnecessary.
 - **CodeMirror is one pre-built file** in `static/vendor/codemirror.js`, kept in the repo. Bundling guarantees a single copy of CodeMirror's core (loading its packages separately from a CDN can produce two, which breaks the editor) and works offline. Node is needed only to upgrade it: `cd tools/codemirror && npm install && npm run build`.
+- **Math is KaTeX**, also kept in the repo (`static/vendor/katex/`, upgraded with `cd tools/katex && npm install && npm run build`). The server's Markdown parser turns `$…$` and `$$…$$` into elements holding the LaTeX source, so Markdown can't mangle it; `app.js` typesets them in the page. Pandoc's rules apply (no space just inside the dollars, no digit right after the closing one), so prices like "$5 and $10" stay text.
 - **`LLMProvider`** has one method, roughly `complete(system, user, schema) → dict`. `ClaudeProvider` is the real one. `FakeProvider` returns canned responses for tests and demos.
 - **Graceful failure:** if an LLM call errors or times out, that card falls back to "flip and mark yourself." A session never blocks on the LLM.
 - **Schema changes:** numbered SQL files (`migrations/001_init.sql`, `002_….sql`) applied at startup, tracked with SQLite's built-in `PRAGMA user_version`. No migration framework.
@@ -318,9 +319,10 @@ learner/
 │   ├── migrations/            # 001_init.sql, …
 │   ├── prompts/               # hint.md, grade.md, sequence.md
 │   ├── templates/             # Jinja2 pages
-│   ├── static/                # app.js, editor.js, app.css, vendor/codemirror.js
+│   ├── static/                # app.js, editor.js, app.css, vendor/codemirror.js, vendor/katex/
 │   └── starter/               # sql.json, python.json
 ├── tools/codemirror/          # how vendor/codemirror.js is built (upgrade-time only)
+├── tools/katex/               # how vendor/katex/ is copied in (upgrade-time only)
 ├── tests/                     # engine + sequencer unit tests, FakeProvider
 └── evals/                     # grader test set + runner script
 ```
@@ -406,7 +408,7 @@ There is no progress table. Status, streak, and last-seen time are calculated fr
   - *Basic (and reversed)*: two cards, one each way.
   - *Cloze*: one card per gap (`{{c1::…}}`), with that gap shown as `[…]` in the prompt and its text as the answer.
   - *Anything else*: first field → prompt, the remaining fields → reference answer; the preview shows what each note type will become.
-- **Formatting:** Anki fields are HTML. They're converted to Markdown: `<img>` → stored images (§12.1), `<pre>`/`<code>` → code blocks, bold/italics/lists → Markdown, anything else → plain text. All imported cards are `text` format; change a card to Python or SQL afterwards if it's really a code card.
+- **Formatting:** Anki fields are HTML. They're converted to Markdown: `<img>` → stored images (§12.1), `<pre>`/`<code>` → code blocks, bold/italics/lists → Markdown, MathJax/LaTeX math (`\(…\)`, `\[…\]`, `[$]…[/$]`, `[$$]…[/$$]`) → `$…$` / `$$…$$`, anything else → plain text. All imported cards are `text` format; change a card to Python or SQL afterwards if it's really a code card.
 - **Tags** come across as tags.
 - **Review history is not imported.** Everything starts fresh as `new`.
 - **Re-importing** an updated deck updates cards instead of duplicating them: each card stores its Anki note id and card template (new `card.source_ref` column).

@@ -51,6 +51,9 @@ Good cards:
   (e.g. "Table `orders(id, customer_id, total)`"). Don't refer to "the previous card".
 - **Use Markdown** in `prompt` and `reference_answer`, with backticks for code. Bold the key
   constraint when it matters ("**without** a loop").
+- **Write math as LaTeX** between dollar signs: `$x^2$` inline, or `$$` on its own line above and
+  below for a display equation. No space just inside the dollars (`$x$`, not `$ x $`). Plain
+  amounts like "$5" stay text. In JSON, double each backslash: `"$\\frac{a}{b}$"`.
 - **Have a correct, idiomatic reference answer.** For `python` and `sql` cards the reference
   answer is *only the code*, no prose and no code fences. SQL uses the collection's `sql_dialect`.
 - **List 2–4 key points** in `rubric`: short, checkable phrases saying what a correct answer must

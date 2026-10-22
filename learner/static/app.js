@@ -1,6 +1,15 @@
 // Page behavior: the study screen and the card form.
 import { mountEditor, highlightBlock } from "./editor.js";
 
+// Math: the server turns $…$ and $$…$$ in Markdown into .math elements holding the LaTeX source; KaTeX
+// (vendor/katex, loaded by base.html) typesets them. Bad LaTeX shows in red rather than breaking the page.
+function typesetMath(root) {
+  if (!window.katex) return;
+  for (const el of root.querySelectorAll(".math.inline, .math.block")) {
+    katex.render(el.textContent.trim(), el, { displayMode: el.classList.contains("block"), throwOnError: false });
+  }
+}
+
 const isTyping = () => {
   const el = document.activeElement;
   return !!el && (["TEXTAREA", "INPUT", "SELECT"].includes(el.tagName) || el.isContentEditable);
@@ -162,6 +171,7 @@ function initStudy(study) {
     chat.push({ role: "tutor", text: reply.reply });
     const bubble = el("div", "tutor-msg tutor markdown");
     bubble.innerHTML = reply.html; // rendered server-side from Markdown with raw HTML disabled
+    typesetMath(bubble);
     tutorLog.append(bubble);
     bubble.scrollIntoView({ behavior: "smooth", block: "nearest" });
     tutorText.focus();
@@ -337,6 +347,7 @@ function initCardForm(form) {
   refresh();
 }
 
+typesetMath(document);
 const study = document.getElementById("study");
 if (study) initStudy(study);
 const cardForm = document.getElementById("card-form");

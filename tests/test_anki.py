@@ -115,6 +115,11 @@ def test_reads_both_formats_with_every_card_kind(new_format):
     assert c1.tags == ()  # "null" isn't a real tag
 
 
+def test_math_becomes_dollar_latex():
+    md = anki.to_markdown(r"Is \(x_1 &lt; y^*\)? [$]a_b[/$]<br>Sum: \[\sum_{i=1}^n i<br>= n\] <b>bold_word</b>")
+    assert md == "Is $x_1 < y^*$? $a_b$\nSum:\n\n$$\n\\sum_{i=1}^n i = n\n$$\n\n**bold\\_word**"
+
+
 def test_collection_mapping():
     assert anki.collection_for(("SQL", "Joins")) == ("SQL", "Joins")
     assert anki.collection_for(("Python",)) == ("", "Python")
