@@ -12,7 +12,6 @@
   <section class="card-panel prompt">
     <div class="prompt-head">
       {{ status_badge(progress.status) }}
-      {% if card.tier != tier %}<span class="badge">refresher · tier {{ card.tier }}</span>{% endif %}
     </div>
     <div class="markdown">{{ card.prompt|md }}</div>
   </section>

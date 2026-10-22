@@ -94,18 +94,18 @@ def test_lowest_tier_is_always_unlocked():
 # --- sessions ---
 
 
-def test_plan_takes_learning_then_new_then_refresher():
-    cfg = Config(session_size=10, new_per_session=2, refresher_pct=0.1)
+def test_plan_takes_learning_then_new_and_no_known_cards():
+    cfg = Config(session_size=10, new_per_session=2)
     cards = [card(i) for i in range(1, 8)]
     start = {i: engine.Progress(NEW) for i in range(1, 8)}
     start[1] = engine.Progress(LEARNING, recent_accuracy=0.8)
     start[2] = engine.Progress(LEARNING, recent_accuracy=0.2)
     start[3] = engine.Progress(KNOWN, last_seen="2026-03-01")
     start[4] = engine.Progress(KNOWN, last_seen="2026-02-01")
-    assert engine.session_plan(cards, start, 1, cfg) == [2, 1, 5, 6, 4]
+    assert engine.session_plan(cards, start, 1, cfg) == [2, 1, 5, 6]
 
 
-def test_complete_tier_gives_short_refresher_pass():
+def test_complete_tier_gives_short_review_pass():
     cfg = Config(session_size=20)
     cards = [card(i) for i in range(1, 11)]
     start = {i: engine.Progress(KNOWN, last_seen=f"2026-01-{i:02d}") for i in range(1, 11)}
@@ -235,7 +235,7 @@ def test_tier_progress_counts_half_way_cards_and_unlocks_on_it():
 
 
 def test_recently_answered_card_sits_out_and_new_cards_take_its_place():
-    cfg = Config(session_size=4, new_per_session=1, refresher_pct=0, space_cards=3)
+    cfg = Config(session_size=4, new_per_session=1, space_cards=3)
     cards = [card(i) for i in range(1, 6)]
     start = {i: engine.Progress(NEW) for i in range(1, 6)}
     start[1] = engine.Progress(LEARNING, recent_accuracy=0.5)
@@ -258,11 +258,18 @@ def test_everything_spaced_still_gives_a_session_longest_waiting_first():
     assert engine.session_state(cards, attempts, "s2", 1, cfg).next_card_id == 1
 
 
-def test_learning_cards_from_lower_tiers_join_the_session():
-    cfg = Config(session_size=10, new_per_session=5, refresher_pct=0)
-    cards = [card(1, tier=1), card(2, tier=2), card(3, tier=2)]
-    start = {1: engine.Progress(LEARNING), 2: engine.Progress(LEARNING), 3: engine.Progress(NEW)}
-    assert engine.session_plan(cards, start, 2, cfg) == [2, 1, 3]  # this tier's learning cards first
+def test_session_draws_only_on_its_own_tier():
+    cfg = Config(session_size=10, new_per_session=5)
+    cards = [card(1, tier=1), card(2, tier=2), card(3, tier=2), card(4, tier=1)]
+    start = {1: engine.Progress(LEARNING), 2: engine.Progress(LEARNING), 3: engine.Progress(NEW), 4: engine.Progress(KNOWN)}
+    assert engine.session_plan(cards, start, 2, cfg) == [2, 3]
+
+
+def test_complete_tier_review_stays_in_its_tier():
+    cfg = Config(session_size=20)
+    cards = [card(1, tier=1), card(2, tier=2)]
+    start = {1: engine.Progress(KNOWN), 2: engine.Progress(KNOWN)}
+    assert engine.session_plan(cards, start, 2, cfg) == [2]
 
 
 def test_answers_since_counts_answers_after_each_cards_last_one():

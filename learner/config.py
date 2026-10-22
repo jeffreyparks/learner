@@ -15,9 +15,9 @@ class ConfigError(ValueError):
 # One word instead of several knobs (DESIGN.md §5.7). Each preset sets these study settings;
 # anything also set explicitly in learner.toml wins over the preset.
 PACES: dict[str, dict[str, float | int]] = {
-    "slow": dict(unlock_pct=0.90, known_streak=3, new_per_session=3, refresher_pct=0.20, assisted_credit=0.0),
-    "medium": dict(unlock_pct=0.70, known_streak=2, new_per_session=10, refresher_pct=0.10, assisted_credit=0.5),
-    "fast": dict(unlock_pct=0.50, known_streak=1, new_per_session=10, refresher_pct=0.05, assisted_credit=0.5),
+    "slow": dict(unlock_pct=0.90, known_streak=3, new_per_session=3, assisted_credit=0.0),
+    "medium": dict(unlock_pct=0.70, known_streak=2, new_per_session=10, assisted_credit=0.5),
+    "fast": dict(unlock_pct=0.50, known_streak=1, new_per_session=10, assisted_credit=0.5),
 }
 
 
@@ -33,7 +33,6 @@ class Config:
     assisted_credit: float = 0.0  # streak credit for a right answer after a hint (0 = none, 0.5 = half a step)
     session_size: int = 20
     new_per_session: int = 5
-    refresher_pct: float = 0.10
     known_streak: int = 2
     unlock_pct: float = 0.80
     requeue_gap: int = 3
@@ -61,7 +60,7 @@ class Config:
                 raise ConfigError(f"{name} must not be negative")
         if self.pace and self.pace not in PACES:
             raise ConfigError('pace must be "slow", "medium" or "fast"')
-        for name in ("refresher_pct", "unlock_pct", "assisted_credit"):
+        for name in ("unlock_pct", "assisted_credit"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ConfigError(f"{name} must be between 0 and 1")
         if not 0 < self.max_image_mb <= 20:
@@ -86,6 +85,8 @@ def with_pace(cfg: Config, pace: str) -> Config:
     return replace(cfg, pace=pace, **values)
 
 
+RETIRED = {"study": ("refresher_pct",)}  # settings that no longer do anything; ignored so old files still load
+
 SECTIONS = {
     "app": ("db_path", "port", "open_browser", "max_image_mb"),
     "study": (
@@ -93,7 +94,6 @@ SECTIONS = {
         "assisted_credit",
         "session_size",
         "new_per_session",
-        "refresher_pct",
         "known_streak",
         "unlock_pct",
         "requeue_gap",
@@ -142,6 +142,8 @@ def load(path: str | Path | None = None) -> Config:
         if section not in SECTIONS or not isinstance(settings, dict):
             raise ConfigError(f"{path}: unknown section [{section}]")
         for key, value in settings.items():
+            if key in RETIRED.get(section, ()):
+                continue
             if key not in SECTIONS[section]:
                 raise ConfigError(f"{path}: unknown setting {section}.{key}")
             expected = types[key]
