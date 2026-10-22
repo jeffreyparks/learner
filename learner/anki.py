@@ -13,6 +13,7 @@ Both export formats are supported:
 from __future__ import annotations
 
 import hashlib
+import html as htmllib
 import io
 import json
 import re
@@ -312,9 +313,23 @@ def plain(html: str) -> str:
 # --- HTML → Markdown ---
 
 
+# Anki's MathJax \(…\) and \[…\], and its LaTeX [$]…[/$] and [$$]…[/$$]. Groups: inline, display, inline, display.
+ANKI_MATH = re.compile(r"\\\((.+?)\\\)|\\\[(.+?)\\\]|\[\$\](.+?)\[/\$\]|\[\$\$\](.+?)\[/\$\$\]", re.S)
+
+
 def to_markdown(html: str, image_url: Callable[[str], str | None] = lambda name: None) -> str:
     """Convert a card side to Markdown. `image_url` maps an image file name to its stored URL (or None)."""
-    soup = BeautifulSoup(html or "", "html.parser")
+    # Math becomes Learner's $…$ / $$…$$. It's swapped for placeholders first so markdownify doesn't escape its _ and *.
+    maths: list[str] = []
+
+    def hold(m: re.Match) -> str:
+        inline = m.group(1) or m.group(3)
+        tex = htmllib.unescape(re.sub(r"<br\s*/?>", " ", re.sub(r"<(?!br)[^>]*>", "", inline or m.group(2) or m.group(4)))).strip()
+        maths.append(f"${tex}$" if inline is not None else f"\n\n$$\n{tex}\n$$\n\n")
+        return f"LEARNERMATH{len(maths) - 1}X"
+
+    html = ANKI_MATH.sub(hold, html or "")
+    soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style"]):
         tag.decompose()
     for img in soup.find_all("img"):
@@ -331,6 +346,12 @@ def to_markdown(html: str, image_url: Callable[[str], str | None] = lambda name:
             (c.removeprefix("language-") for c in (el.get("class") or []) if c.startswith("language-")), None
         ),
     )
+
+    def put_back(m: re.Match) -> str:
+        tex = maths[int(m.group(2))]
+        return tex if tex.startswith("\n") else m.group(1) + tex + m.group(3)  # display math takes its own lines
+
+    md = re.sub(r"([ \t]*)LEARNERMATH(\d+)X([ \t]*)", put_back, md)
     md = md.replace("\xa0", " ")
     md = re.sub(r"[ \t]+\n", "\n", md)
     return re.sub(r"\n{3,}", "\n\n", md).strip()

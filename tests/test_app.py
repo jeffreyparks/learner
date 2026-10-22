@@ -279,6 +279,15 @@ def test_list_titles_drop_markdown_but_keep_identifiers():
     assert plain_title("What is **`dict.get`**?") == "What is dict.get?"
 
 
+def test_markdown_marks_latex_math_for_katex():
+    from learner.app import render_markdown
+    html = str(render_markdown("Solve $x_1 < y_*$ for *x*.\n\n$$\n\\frac{a}{b}\n$$\n\n`$code$`"))
+    assert '<span class="math inline">x_1 &lt; y_*</span>' in html and "<em>x</em>" in html
+    assert '<div class="math block">\n\\frac{a}{b}\n</div>' in html
+    assert "<code>$code$</code>" in html
+    assert "<p>Costs $5 and $10, or $ 3 $.</p>" in str(render_markdown("Costs $5 and $10, or $ 3 $."))  # money stays text
+
+
 def test_stats_page(client):
     assert "No answers yet" in client.get("/stats").text
     url = start_session(client)
