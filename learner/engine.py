@@ -203,29 +203,28 @@ def session_plan(
     def spaced(c: Card) -> bool:
         return c.id in waited and waited[c.id] < cfg.space_cards
 
-    in_tier = [c for c in cards if c.tier == tier]
+    in_tier = [c for c in cards if c.tier == tier]  # a session never draws on other tiers
     complete = not any(start[c.id].status in (LEARNING, NEW) for c in in_tier)
-    all_learning = [c for c in cards if c.tier <= tier and start[c.id].status == LEARNING]
+    all_learning = [c for c in in_tier if start[c.id].status == LEARNING]
     learning = sorted(
         (c for c in all_learning if not spaced(c)),
-        key=lambda c: (c.tier != tier, start[c.id].recent_accuracy, start[c.id].last_seen or "", c.id),
+        key=lambda c: (start[c.id].recent_accuracy, start[c.id].last_seen or "", c.id),
     )
     new = sorted((c for c in in_tier if start[c.id].status == NEW), key=lambda c: (c.created_at, c.id))
     if order is not None:
         known_ids = {cid for cid, p in start.items() if p.status == KNOWN}
         by_id = {c.id: c for c in new}
         new = [by_id[cid] for cid in sequencer.new_card_order(order, tier, set(by_id), known_ids)]
-    all_known = [c for c in cards if c.tier <= tier and start[c.id].status == KNOWN]
-    known = sorted((c for c in all_known if not spaced(c)), key=lambda c: (start[c.id].last_seen or "", c.id))
-    if complete:  # a short refresher-only pass
+    all_known = [c for c in in_tier if start[c.id].status == KNOWN]
+    if complete:  # a short review of this tier's cards, least recently seen first
+        known = sorted((c for c in all_known if not spaced(c)), key=lambda c: (start[c.id].last_seen or "", c.id))
         plan = known[: max(1, cfg.session_size // 4)]
     else:
         n_new = min(len(new), cfg.new_per_session)
-        n_refresh = min(len(known), round(cfg.session_size * cfg.refresher_pct))
-        n_learning = min(len(learning), max(0, cfg.session_size - n_new - n_refresh))
+        n_learning = min(len(learning), max(0, cfg.session_size - n_new))
         held_back = len(all_learning) - len(learning)
-        n_new = min(len(new), n_new + min(held_back, max(0, cfg.session_size - n_new - n_refresh - n_learning)))
-        plan = learning[:n_learning] + new[:n_new] + known[:n_refresh]
+        n_new = min(len(new), n_new + min(held_back, max(0, cfg.session_size - n_new - n_learning)))
+        plan = learning[:n_learning] + new[:n_new]
     if not plan:  # everything is spaced out: rather than an empty session, the longest-waiting cards come back
         waiting = sorted(all_learning if not complete else all_known, key=lambda c: (-waited.get(c.id, 0), c.id))
         plan = waiting[: cfg.session_size if not complete else max(1, cfg.session_size // 4)]

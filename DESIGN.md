@@ -34,7 +34,7 @@ A single-user, self-hosted study app inspired by Anki, built for **fast technica
 1. **One process, one database file, one language.** Python end to end, with no Node toolchain and no services to babysit.
 2. **Small modules with narrow interfaces** (see §9). Each one can be tested and replaced on its own.
 3. **The study engine is pure logic.** Given cards and attempts, it calculates statuses and the next queue. No I/O, no LLM, no cached state. That makes it easy to test.
-4. **The attempt log is the only record of progress.** Status, streaks, and the refresher order are all calculated from it, so nothing can drift out of step. The one deliberate exception is `max_unlocked_tier` (§5.6), which is stored because working out "was this tier ever unlocked" by replaying history isn't worth it.
+4. **The attempt log is the only record of progress.** Status, streaks, and session order are all calculated from it, so nothing can drift out of step. The one deliberate exception is `max_unlocked_tier` (§5.6), which is stored because working out "was this tier ever unlocked" by replaying history isn't worth it.
 5. **The LLM advises; the user decides.** LLM output (grades, concept tags, order) can always be overridden, and an override is never overwritten by the LLM.
 6. **One config file.** Every setting lives in `learner.toml`, with defaults in `config.py`. The API key comes from the standard `ANTHROPIC_API_KEY` environment variable (or `ANTHROPIC_AUTH_TOKEN`).
 7. **Prompts are text files, not code.** Tuning the LLM means editing a file in `prompts/`.
@@ -119,23 +119,21 @@ Calculated from the card's attempts since its last `progress_reset_at`:
 A wrong answer on a `known` card resets the streak, so the card drops back to `learning`.
 
 ### 5.4 One step forward per session
-**Only a card's first attempt in a session can raise its streak.** Later attempts in the same session (misses that come back, refreshers) can still reset the streak if wrong, and they don't raise it, with one exception: a `correct` answer after a miss in the same session adds `assisted_credit` (once per session), so a recovered card isn't a wasted session.
+**Only a card's first attempt in a session can raise its streak.** Later attempts in the same session (misses that come back) can still reset the streak if wrong, and they don't raise it, with one exception: a `correct` answer after a miss in the same session adds `assisted_credit` (once per session), so a recovered card isn't a wasted session.
 
 So "2 in a row" means right in **two separate sessions**. There's no calendar, but a card has to survive a break before it's `known`: spacing (§5.8) keeps a card you just answered out of the next session, so back-to-back sessions can't count as a break. Short-term memory alone doesn't count.
 
 ### 5.5 Session
-A session covers **one collection and one tier**. By default that's the highest unlocked tier, and you can pick another one.
+A session covers **one collection and one tier**, and draws only on that tier's cards: no cards from lower tiers, and no refresher sample of `known` cards. By default that's the highest unlocked tier, and you can pick another one.
 
 Queue, in priority order, up to `session_size` (default **20**):
 1. **Misses from this session.** They come back about 3 cards later, once (`max_attempts_per_card`, default **2** tries per session), for practice only (§5.4).
-2. **`learning` cards** from this tier, then from lower tiers, weakest first, judged by accuracy over their last 5 attempts.
+2. **`learning` cards** from this tier, weakest first, judged by accuracy over their last 5 attempts.
 3. **`new` cards** in concept-graph order (§6), up to `new_per_session` (default **5**), plus one more for each place a spaced-out `learning` card left empty.
-4. **Refresher:** `known` cards from this tier and lower ones, **least recently seen first**, up to `refresher_pct` of the session (default **10%**). This is the only resurfacing mechanism; nothing is time-based.
-
-Cards still spaced out (§5.8) are left out of 2 and 4.
+Cards still spaced out (§5.8) are left out of 2.
 
 ### 5.7 Pace
-`pace = "slow" | "medium" | "fast"` in `[study]` sets five settings at once; any of them also set in `learner.toml` wins. Unset means the plain defaults.
+`pace = "slow" | "medium" | "fast"` in `[study]` sets four settings at once; any of them also set in `learner.toml` wins. Unset means the plain defaults.
 
 The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choice is saved in the `setting` table and beats `pace` in `learner.toml`, but never the individual values pinned in `learner.toml`. It applies to every collection unless one sets its own: the collection's edit page has a **Pace** field ("Same as everywhere" by default), stored in the collection's `pace` column. A collection's pace also respects values pinned in `learner.toml`, and isn't included in JSON export.
 
@@ -144,7 +142,6 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
 | `unlock_pct` | 90% | 70% | 50% |
 | `known_streak` | 3 | 2 | 1 |
 | `new_per_session` | 3 | 10 | 10 |
-| `refresher_pct` | 20% | 10% | 5% |
 | `assisted_credit` | 0 | 0.5 | 0.5 |
 
 `assisted_credit` is the streak a first-in-session `assisted` answer adds, and also what a right retry after a miss adds (a clean first-try answer adds 1), so with `0.5` two hinted answers equal one clean one. `fast` uses a streak of 1, which gives up the "survive a break" spacing of §5.4.
@@ -154,7 +151,7 @@ The dashboard has a **Pace** dropdown (Default / Slow / Medium / Fast). The choi
 - **Unlock:** Tier N+1 unlocks when Tier N's progress reaches `unlock_pct` (default **80%**). On `fast` (`known_streak` 1) this is the same as the share of cards that are `known`.
 - **Sticky:** once a tier is unlocked, it stays unlocked, even if later misses drop the lower tier below the threshold.
 - **Soft:** before it unlocks, you can still start it after a warning.
-- **Tier complete:** when every active card in a tier is `known`, the dashboard and end-of-session screen say so and suggest the next tier. A session on a completed tier is a short refresher-only pass.
+- **Tier complete:** when every active card in a tier is `known`, the dashboard and end-of-session screen say so and suggest the next tier. A session on a completed tier is a short review of that tier's cards, least recently seen first.
 
 ### 5.8 Spacing
 Spacing is counted in **answers, not time**. After you answer a card, it sits out new sessions until you've given `space_cards` (default **20**, about one session) other answers in that collection, on any card. A miss still comes back within its own session (§5.5); spacing only decides whether a later session shows it.
@@ -296,7 +293,7 @@ Each answer format is one entry in a small registry. Adding a language means add
 | Where | What |
 |---|---|
 | `ANTHROPIC_API_KEY` env var | The API key. Unset means LLM features are off. |
-| `learner.toml` | Everything else: LLM provider (`claude`, `fake` for demos/tests, or `off`), model per task, effort, timeout, DB path, port, `session_size`, `new_per_session`, `refresher_pct`, `known_streak`, `unlock_pct`. |
+| `learner.toml` | Everything else: LLM provider (`claude`, `fake` for demos/tests, or `off`), model per task, effort, timeout, DB path, port, `session_size`, `new_per_session`, `known_streak`, `unlock_pct`. |
 | Collection edit form | Only what belongs to a collection: name, tier labels, SQL dialect. |
 
 - Defaults live in `config.py`. A missing `learner.toml` just means "all defaults."
